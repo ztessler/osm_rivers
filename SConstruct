@@ -23,7 +23,7 @@ OSMriver = os.environ.get('OSMriver', 'vietnam')
 STNres = os.environ.get('STNres', '06min')
 
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
-OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
+OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
 work = 'work'
