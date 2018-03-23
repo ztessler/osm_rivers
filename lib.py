@@ -142,9 +142,11 @@ def keep_n_rivers(source, target, env):
 
 def import_rgis_network(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
-        basins = rast.read(1)
+        cellids = rast.read(1)
         nodata = rast.nodata
     with rasterio.open(str(source[1]), 'r') as rast:
+        basins = rast.read(1)
+    with rasterio.open(str(source[2]), 'r') as rast:
         flowdir = rast.read(1)
 
     neighbors = {
@@ -158,14 +160,14 @@ def import_rgis_network(source, target, env):
 	    128: (1, -1),
 	    }
     G = nx.DiGraph()
-    for y in range(basins.shape[0]):
-        for x in range(basins.shape[1]):
-            if basins[y,x] != nodata:
+    for y in range(cellids.shape[0]):
+        for x in range(cellids.shape[1]):
+            if cellids[y,x] != nodata:
                 G.add_node((x,y))
                 tocell = flowdir[y,x]
                 if tocell != nodata:
                     dx, dy = neighbors[tocell]
-                    if basins[y+dy, x+dx] != nodata:
+                    if cellids[y+dy, x+dx] != nodata:
                         G.add_edge((x, y), (x+dx, y+dy))
     nx.write_yaml(G, str(target[0]))
     return 0

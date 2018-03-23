@@ -11,9 +11,11 @@ SetOption('max_drift', 1)
 
 env = Environment(ENV = {'PATH' : os.environ['PATH'],
                          'GDAL_DATA': os.environ['GDAL_DATA'],
+                         'GHAASBIN': os.environ.get('GHAASDIR', '/Users/ecr/ztessler/opt/ghaas_bifur/ghaas/bin/'),
                          })
 env.Decider('MD5-timestamp')
 
+GHAASBIN = env['ENV']['GHAASBIN']
 work = 'work'
 output = 'output'
 figures = 'figures'
@@ -76,38 +78,38 @@ env.Command(
         action=lib.keep_n_rivers,
         n=1)
 
+# add record id column to network cell table
+network = os.path.join(work, '{0}_{1}_network.gdbn'.format(delta, STNres))
+env.Command(
+        source=STNnetwork,
+        target=network,
+        action=GHAASBIN+'tblAddIdXY $SOURCE $TARGET')
+
 # import RGIS network
+cellid = os.path.join(work, '{0}_{1}_cellid.{{ext}}'.format(delta, STNres))
 basins = os.path.join(work, '{0}_{1}_basins.{{ext}}'.format(delta, STNres))
 flowdir = os.path.join(work, '{0}_{1}_flowdir.{{ext}}'.format(delta, STNres))
-env.Command(
-        source=STNnetwork,
-        target=basins.format(ext='nc'),
-        action=[
-            'netCells2Grid -f BasinID -t BasinID -u BasinID -d {0} $SOURCE ${{TARGET}}.1'.format(delta),
-            'grdRenameLayers -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
-            'grdDateLayers -y 1 -e day ${TARGET}.2 ${TARGET}.3',
-            'rgis2netcdf ${TARGET}.3 $TARGET'])
-env.Command(
-        source=basins.format(ext='nc'),
-        target=basins.format(ext='tif'),
-        action=lib.georef_nc)
-env.Command(
-        source=STNnetwork,
-        target=flowdir.format(ext='nc'),
-        action=[
-            'netCells2Grid -f ToCell -t ToCell -u ToCell -d {0} $SOURCE ${{TARGET}}.1'.format(delta),
-            'grdRenameLayers -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
-            'grdDateLayers -y 1 -e day ${TARGET}.2 ${TARGET}.3',
-            'rgis2netcdf ${TARGET}.3 $TARGET'])
-env.Command(
-        source=flowdir.format(ext='nc'),
-        target=flowdir.format(ext='tif'),
-        action=lib.georef_nc)
+for (path, varname) in [(cellid, 'CellID'),
+                        (basins, 'BasinID'),
+                        (flowdir, 'ToCell')]:
+    env.Command(
+            source=network,
+            target=path.format(ext='nc'),
+            action=[
+                'netCells2Grid -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, delta),
+                'grdRenameLayers -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
+                'grdDateLayers -y 1 -e day ${TARGET}.2 ${TARGET}.3',
+                'rgis2netcdf ${TARGET}.3 $TARGET'])
+    env.Command(
+            source=path.format(ext='nc'),
+            target=path.format(ext='tif'),
+            action=lib.georef_nc)
 
 network = os.path.join(work, '{0}_{1}_network.nx.yaml'.format(delta, STNres))
 env.Command(
-        source=[basins.format(ext='tif'),
-               flowdir.format(ext='tif')],
+        source=[cellid.format(ext='tif'),
+                basins.format(ext='tif'),
+                flowdir.format(ext='tif')],
         target=network,
         action=lib.import_rgis_network)
 
