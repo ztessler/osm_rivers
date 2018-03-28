@@ -141,7 +141,8 @@ network = os.path.join(work, '{0}_{1}_network.nx.yaml'.format(delta, STNres))
 env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
-                flowdir.format(ext='tif')],
+                flowdir.format(ext='tif'),
+                proj4str],
         target=network,
         action=lib.import_rgis_network)
 

@@ -221,10 +221,15 @@ def import_rgis_network(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         cellids = rast.read(1)
         nodata = rast.nodata
+        affine = rast.affine
+        assert rast.crs['init'] == 'epsg:4326'
     with rasterio.open(str(source[1]), 'r') as rast:
         basins = rast.read(1)
     with rasterio.open(str(source[2]), 'r') as rast:
         flowdir = rast.read(1)
+    with open(str(source[3]), 'r') as fin:
+        proj4str = fin.read().strip()
+    proj = pyproj.Proj(proj4str)
 
     neighbors = {
             1: (1, 0),
@@ -236,16 +241,24 @@ def import_rgis_network(source, target, env):
 	    64: (0, -1),
 	    128: (1, -1),
 	    }
+
     G = nx.DiGraph()
-    for y in range(cellids.shape[0]):
-        for x in range(cellids.shape[1]):
-            if cellids[y,x] != nodata:
-                G.add_node((x,y))
-                tocell = flowdir[y,x]
-                if tocell != nodata:
-                    dx, dy = neighbors[tocell]
-                    if cellids[y+dy, x+dx] != nodata:
-                        G.add_edge((x, y), (x+dx, y+dy))
+    for j in range(cellids.shape[0]):
+        for i in range(cellids.shape[1]):
+            if cellids[j,i] != nodata:
+                ll = affine * (i, j)
+                xy = proj(*ll)
+                G.add_node((i,j), **dict(ll=ll, xy=xy))
+                tocell = flowdir[j,i]
+                if tocell != 0:
+                    di, dj = neighbors[tocell]
+                    i2 = i + di
+                    j2 = j + dj
+                    if cellids[j2, i2] != nodata:
+                        ll2 = affine * (i2, j2)
+                        xy2 = proj(*ll2)
+                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2))
+                        G.add_edge((i, j), (i2, j2))
     nx.write_yaml(G, str(target[0]))
     return 0
 
