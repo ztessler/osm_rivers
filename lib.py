@@ -8,6 +8,8 @@ import cartopy.crs as ccrs
 import networkx as nx
 import skimage.morphology as morph
 from netCDF4 import Dataset
+import pyproj
+import itertools
 
 
 def project_and_clip_osm_rivers(source, target, env):
@@ -118,11 +120,16 @@ def skeleton_riv(source, target, env):
         meta = rast.meta.copy()
 
     closing = env.get('closing', 5)
-    rivers = morph.closing(rivers, morph.square(closing))
+    rivers = morph.binary_closing(rivers, morph.square(closing))
 
     holethresh = env.get('holethresh', 1000)
     rivers = morph.remove_small_holes(rivers, min_size=holethresh, connectivity=2)
 
+    rivers, distance = morph.medial_axis(rivers, return_distance=True)
+    rivers = rivers.astype(np.uint8)
+
+    # another closing to fix weird checkerboards and stuff
+    rivers = morph.binary_closing(rivers, morph.square(3))
     skeleton, distance = morph.medial_axis(rivers, return_distance=True)
     skeleton = skeleton.astype(np.uint8)
     skeleton[skeleton>0] = 255
@@ -147,6 +154,54 @@ def keep_n_rivers(source, target, env):
             longest = rivsize[0]
             maxlen = rivsize[1]
     rivers[labels != longest] = 0
+
+    with rasterio.open(str(target[0]), 'w', **meta) as out:
+        out.write(rivers, 1)
+    return 0
+
+
+def _count_and_trim_segment(j, i, skip, n, minlen, rivers, rivval):
+    downstream = []
+    for dj in [-1, 0, 1]:
+        for di in [-1, 0, 1]:
+            j2 = j + dj
+            i2 = i + di
+            if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]==rivval):
+                skip.append((j2, i2))
+                downstream.extend(_count_and_trim_segment(j2, i2, skip, n+1, minlen, rivers, rivval))
+    return (downstream + [(j,i)])
+
+def _notnextto(a,b):
+    if a[0] == b[0]:
+        return abs(a[1]-b[1]) > 1
+    if a[1] == b[1]:
+        return abs(a[0]-b[0]) > 1
+    return True
+
+def trim_short_rivs(source, target, env):
+    with rasterio.open(str(source[0])) as rast:
+        rivers = rast.read(1)
+        meta = rast.meta.copy()
+    minlen = env.get('minlen', 10)
+
+    rivval = rivers.max()
+    wet = np.where(rivers==rivval)
+    todelete = []
+    for j,i in zip(*wet):
+            skip = [(j, i)]
+            for dj in [-1, 0, 1]:
+                for di in [-1, 0, 1]:
+                    j2 = j + dj
+                    i2 = i + di
+                    if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]==rivval):
+                        skip.append((j2,i2))
+            if len(skip) == 4 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(skip[1:], 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
+                for (j2, i2) in skip[1:]:
+                    segment = _count_and_trim_segment(j2, i2, skip, 1, minlen, rivers, rivval)
+                    if len(segment) < minlen:
+                        todelete.extend(segment)
+    for j,i in todelete:
+        rivers[j,i] = 0
 
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(rivers, 1)

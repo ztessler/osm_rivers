@@ -5,6 +5,8 @@
 
 import os
 import sys
+import hashlib
+
 import lib
 
 SetOption('max_drift', 1)
@@ -14,6 +16,25 @@ env = Environment(ENV = {'PATH' : os.environ['PATH'],
                          'GHAASBIN': os.environ.get('GHAASDIR', '/Users/ecr/ztessler/opt/ghaas_bifur/ghaas/bin/'),
                          })
 env.Decider('MD5-timestamp')
+
+def myCommand(target, source, action, **kwargs):
+    '''
+    env.Command wrapper that forces env override arguments to be sconsign
+    signature database. Wraps all extra kwargs in env.Value nodes and adds
+    them to the source list, after the existing sources. Changing the extra
+    arguments will cause the target to be rebuilt, as long as the data's string
+    representation changes.
+    '''
+    def hash(v):
+        # if this is changed then all targets with env overrides will be rebuilt
+        return hashlib.md5(repr(v).encode('utf-8')).hexdigest()
+    if not isinstance(source, list):
+        source = [source]
+    if None in source:
+        source.remove(None)
+    kwargs['nsources'] = len(source)
+    source.extend([env.Value('{}={}'.format(k,hash(v))) for k,v in kwargs.items()])
+    return env.Command(target=target, source=source, action=action, **kwargs)
 
 GHAASBIN = env['ENV']['GHAASBIN']
 work = 'work'
@@ -75,12 +96,19 @@ env.Command(
         holethresh=1000)
 
 # drop small rivers
-riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
+riv_dropped_small = os.path.join(work, '{0}_riv_dropped_small.tif'.format(delta))
 env.Command(
         source=riv_skel,
-        target=riv_clean,
+        target=riv_dropped_small,
         action=lib.keep_n_rivers,
         n=1)
+
+riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
+myCommand(
+        source=riv_dropped_small,
+        target=riv_clean,
+        action=lib.trim_short_rivs,
+        minlen=40)
 
 # add record id column to network cell table
 network = os.path.join(work, '{0}_{1}_network.gdbn'.format(delta, STNres))
