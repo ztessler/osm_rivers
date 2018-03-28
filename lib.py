@@ -62,15 +62,24 @@ def thin_vec(source, target, env):
 
 def rasterize_riv(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
-    imshape = env.get('imshape', (1000, 1000))
+    imsize = env.get('imsize', 1000)
 
     bounds = rivers.bounds
     width = bounds['maxx'].max() - bounds['minx'].min()
     height = bounds['maxy'].max() - bounds['miny'].min()
-    dx = width / imshape[0]
-    dy = height / imshape[1]
+    dx = (width + height) / 2. / imsize
+    #dx = width / imshape[0]
+    #dy = height / imshape[1]
+    imshape = (int(np.ceil(height / dx)), int(np.ceil(width / dx)))
+    buffx = np.ceil(width / dx) - (width / dx)
+    buffy = np.ceil(height / dx) - (height / dx)
+    x0 = bounds['minx'].min() - (buffx * dx)/2
+    x1 = bounds['maxx'].max() + (buffx * dx)/2
+    y0 = bounds['miny'].min() - (buffy * dx)/2
+    y1 = bounds['maxy'].max() + (buffy * dx)/2
 
-    a=dx; b=0; c=bounds['minx'].min(); d=0; e=-dy; f=bounds['maxy'].max()
+
+    a=dx; b=0; c=x0; d=0; e=-dx; f=y1
     affine = rasterio.Affine(a,b,c,d,e,f)
 
     burned = rfeatures.rasterize(
@@ -82,7 +91,7 @@ def rasterize_riv(source, target, env):
 
     with rasterio.open(str(target[0]), 'w',
             driver='GTiff',
-            width=imshape[0], height=imshape[1],
+            width=imshape[1], height=imshape[0],
             count=1, dtype=str(burned.dtype),
             crs=rivers.crs,
             transform=affine,

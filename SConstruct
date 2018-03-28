@@ -75,8 +75,7 @@ env.Command(
 env.Command(
         source=thinned_vec,
         target=os.path.join(figures, '{}_thinned_rivs.png'.format(delta)),
-        action=lib.plot_vec_rivs,
-        imshape=(1000, 1000))
+        action=lib.plot_vec_rivs)
 
 
 # rasterize
@@ -84,7 +83,8 @@ riv_rast = os.path.join(work, '{0}_riv_rast.tif'.format(delta))
 env.Command(
         source=thinned_vec,
         target=riv_rast,
-        action=lib.rasterize_riv)
+        action=lib.rasterize_riv,
+        imsize=1000)
 
 # skeletonize raster
 riv_skel = os.path.join(work, '{0}_riv_skeleton.tif'.format(delta))
