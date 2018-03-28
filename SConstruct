@@ -38,6 +38,10 @@ env.Command(
         source=[OSMrivers, deltashp],
         target=[clipped_vec, proj4str],
         action=lib.project_and_clip_osm_rivers)
+#env.Command(
+        #source=[OSMrivers, deltashp],
+        #target=clipped_vec,
+        #action=lib.clip_osm_rivers)
 
 thinned_vec = os.path.join(work, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 env.Command(

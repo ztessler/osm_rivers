@@ -33,6 +33,19 @@ def project_and_clip_osm_rivers(source, target, env):
     return 0
 
 
+def clip_osm_rivers(source, target, env):
+    rivers_ll = geopandas.read_file(str(source[0]))
+    delta_ll = geopandas.read_file(str(source[1]))
+
+    deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'])
+    deltahull_ll.crs = delta_ll.crs
+
+    rivers_clip = geopandas.overlay(rivers_ll, deltahull_ll, how='intersection') #slow
+
+    rivers_clip.to_file(str(target[0]))
+    return 0
+
+
 def thin_vec(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     thresh = env.get('thresh', 100)
