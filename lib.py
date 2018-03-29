@@ -60,6 +60,19 @@ def thin_vec(source, target, env):
     return 0
 
 
+def plot_vec_rivs(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+
+    mpl.style.use('ggplot')
+
+    fig, ax = plt.subplots(1, 1, figsize=(8,6))
+    rivers.plot(ax=ax)
+    ax.set_aspect('equal')
+    fig.savefig(str(target[0]))
+
+    return 0
+
+
 def rasterize_riv(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     imsize = env.get('imsize', 1000)
