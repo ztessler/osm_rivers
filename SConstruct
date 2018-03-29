@@ -110,6 +110,13 @@ myCommand(
         action=lib.trim_short_rivs,
         minlen=40)
 
+bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
+env.Command(
+        source=riv_clean,
+        target=bifur_grid,
+        action=lib.find_bifurs)
+
+
 # add record id column to network cell table
 network = os.path.join(work, '{0}_{1}_network.gdbn'.format(delta, STNres))
 env.Command(

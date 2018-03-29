@@ -7,6 +7,7 @@ import rasterio.features as rfeatures
 import cartopy.crs as ccrs
 import networkx as nx
 import skimage.morphology as morph
+from scipy.ndimage.filters import generic_filter
 from netCDF4 import Dataset
 import pyproj
 import itertools
@@ -281,16 +282,46 @@ def import_rgis_network(source, target, env):
     return 0
 
 
-def plot_vec_rivs(source, target, env):
-    rivers = geopandas.read_file(str(source[0]))
+def find_bifurs(source, target, env):
+    with rasterio.open(str(source[0], 'r')) as rast:
+        rivers = rast.read(1)
+        meta = rast.meta.copy()
 
-    mpl.style.use('ggplot')
+    # count all neighbor river cells for each river cell
+    neighbor_elem = np.array([[1,1,1],
+                              [1,0,1],
+                              [1,1,1]])
+    neighbors = generic_filter(rivers, np.sum, footprint=neighbor_elem)
+    neighbors[rivers==0] = 0
 
-    fig, ax = plt.subplots(1, 1, figsize=(8,6))
-    rivers.plot(ax=ax)
-    ax.set_aspect('equal')
-    fig.savefig(str(target[0]))
+    # bifurcations have 3 river neighbors. some curves can also have 3, but in these cases two of
+    # the neighbors are adjacent to each other. so find those adjecent cells and remove them
+    pair_elems = []
+    pair_elems.append(np.array([[1,1,0],[0,0,0],[0,0,0]]))
+    pair_elems.append(np.array([[0,1,1],[0,0,0],[0,0,0]]))
+    pair_elems.append(np.array([[0,0,1],[0,0,1],[0,0,0]]))
+    pair_elems.append(np.array([[0,0,0],[0,0,1],[0,0,1]]))
+    pair_elems.append(np.array([[0,0,0],[0,0,0],[0,1,1]]))
+    pair_elems.append(np.array([[0,0,0],[0,0,0],[1,1,0]]))
+    pair_elems.append(np.array([[0,0,0],[1,0,0],[1,0,0]]))
+    pair_elems.append(np.array([[1,0,0],[1,0,0],[0,0,0]]))
+    pair_arrs = []
+    for pair_elem in pair_elems:
+        p = (generic_filter(rivers, np.sum, footprint=pair_elem)==2).astype(np.int)
+        p[rivers==0] = 0
+        pair_arrs.append(p)
 
+    pairs = np.array(pair_arrs).sum(axis=0)
+
+    bifurs = neighbors - pairs
+    # bifurs values:
+    # 0: dry land
+    # 1: river head or mouth
+    # 2: river
+    # 3: river bifurcation
+
+    with rasterio.open(str(target[0]), 'w', **meta) as out:
+        out.write(bifurs, 1)
     return 0
 
 
