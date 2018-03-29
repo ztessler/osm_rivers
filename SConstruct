@@ -96,7 +96,7 @@ env.Command(
         holethresh=1000)
 
 # drop small rivers
-riv_dropped_small = os.path.join(work, '{0}_riv_dropped_small.tif'.format(delta))
+riv_dropped_small = os.path.join(work, '{0}_riv_dropped_pieces.tif'.format(delta))
 env.Command(
         source=riv_skel,
         target=riv_dropped_small,
