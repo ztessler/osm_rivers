@@ -183,14 +183,17 @@ def keep_n_rivers(source, target, env):
 
 
 def _count_and_trim_segment(j, i, skip, n, minlen, rivers, rivval):
+    if n > minlen:
+        return [(j,i)]
     downstream = []
     for dj in [-1, 0, 1]:
         for di in [-1, 0, 1]:
+            if dj == di == 0:
+                continue
             j2 = j + dj
             i2 = i + di
             if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]==rivval):
-                skip.append((j2, i2))
-                downstream.extend(_count_and_trim_segment(j2, i2, skip, n+1, minlen, rivers, rivval))
+                downstream.extend(_count_and_trim_segment(j2, i2, skip+[(j,i)], n+1, minlen, rivers, rivval))
     return (downstream + [(j,i)])
 
 def _notnextto(a,b):
@@ -210,16 +213,18 @@ def trim_short_rivs(source, target, env):
     wet = np.where(rivers==rivval)
     todelete = []
     for j,i in zip(*wet):
-            skip = [(j, i)]
+            branches = []
             for dj in [-1, 0, 1]:
                 for di in [-1, 0, 1]:
+                    if dj == di == 0:
+                        continue
                     j2 = j + dj
                     i2 = i + di
-                    if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]==rivval):
-                        skip.append((j2,i2))
-            if len(skip) == 4 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(skip[1:], 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
-                for (j2, i2) in skip[1:]:
-                    segment = _count_and_trim_segment(j2, i2, skip, 1, minlen, rivers, rivval)
+                    if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and (rivers[j2, i2]==rivval):
+                        branches.append((j2,i2))
+            if len(branches) == 3 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(branches, 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
+                for (j2, i2) in branches:
+                    segment = _count_and_trim_segment(j2, i2, [(j,i)]+branches, 1, minlen, rivers, rivval)
                     if len(segment) < minlen:
                         todelete.extend(segment)
     for j,i in todelete:
