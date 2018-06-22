@@ -289,10 +289,10 @@ def import_rgis_network(source, target, env):
                     if cellids[j2, i2] != nodata:
                         ll2 = affine * (i2, j2)
                         xy2 = proj(*ll2)
-                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j,i], cellid=cellids[j,i]))
+                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
                         G.add_edge((i, j), (i2, j2))
                         if (minx < xy2[0] < maxx) and (miny < xy2[1] < maxy):
-                            Gclip.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j,i], cellid=cellids[j,i]))
+                            Gclip.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
                             if (i,j) in Gclip:
                                 Gclip.add_edge((i, j), (i2, j2))
     for node in G.nodes():
