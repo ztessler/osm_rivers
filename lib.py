@@ -1,6 +1,8 @@
+import csv
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import palettable
 import geopandas
 import rasterio
 import rasterio.features as rfeatures
@@ -97,7 +99,7 @@ def rasterize_riv(source, target, env):
     affine = rasterio.Affine(a,b,c,d,e,f)
 
     burned = rfeatures.rasterize(
-            ((f,255) for f in rivers['geometry']),
+            ((f,1) for f in rivers['geometry']),
             out_shape=imshape,
             transform=affine,
             all_touched=True,
@@ -155,7 +157,7 @@ def skeleton_riv(source, target, env):
     rivers = morph.binary_closing(rivers, morph.square(3))
     skeleton, distance = morph.medial_axis(rivers, return_distance=True)
     skeleton = skeleton.astype(np.uint8)
-    skeleton[skeleton>0] = 255
+    skeleton[skeleton>0] = 1
 
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(skeleton, 1)
@@ -246,7 +248,10 @@ def import_rgis_network(source, target, env):
         basins = rast.read(1)
     with rasterio.open(str(source[2]), 'r') as rast:
         flowdir = rast.read(1)
-    with open(str(source[3]), 'r') as fin:
+    with rasterio.open(str(source[3]), 'r') as rast:
+        rivers = rast.read(1)
+        affine_riv = rast.affine
+    with open(str(source[4]), 'r') as fin:
         proj4str = fin.read().strip()
     proj = pyproj.Proj(proj4str)
 
@@ -261,13 +266,21 @@ def import_rgis_network(source, target, env):
 	    128: (1, -1),
 	    }
 
+    minx, maxy = affine_riv * (0,0)
+    maxx, miny = affine_riv * (rivers.shape[1], rivers.shape[0])
+
+        #if not ((minx < px < maxx) and (miny < py < maxy)):
+
     G = nx.DiGraph()
+    Gclip = nx.DiGraph()
     for j in range(cellids.shape[0]):
         for i in range(cellids.shape[1]):
             if cellids[j,i] != nodata:
                 ll = affine * (i, j)
                 xy = proj(*ll)
-                G.add_node((i,j), **dict(ll=ll, xy=xy))
+                G.add_node((i,j), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
+                if (minx < xy[0] < maxx) and (miny < xy[1] < maxy):
+                    Gclip.add_node((i,j), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
                 tocell = flowdir[j,i]
                 if tocell != 0:
                     di, dj = neighbors[tocell]
@@ -276,14 +289,26 @@ def import_rgis_network(source, target, env):
                     if cellids[j2, i2] != nodata:
                         ll2 = affine * (i2, j2)
                         xy2 = proj(*ll2)
-                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2))
+                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j,i], cellid=cellids[j,i]))
                         G.add_edge((i, j), (i2, j2))
+                        if (minx < xy2[0] < maxx) and (miny < xy2[1] < maxy):
+                            Gclip.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j,i], cellid=cellids[j,i]))
+                            if (i,j) in Gclip:
+                                Gclip.add_edge((i, j), (i2, j2))
+    for node in G.nodes():
+        G.node[node]['upstream'] = len(nx.ancestors(G, node))
+        G.node[node]['downstream'] = len(nx.descendants(G, node))
     nx.write_yaml(G, str(target[0]))
+
+    for node in Gclip.nodes():
+        Gclip.node[node]['upstream'] = len(nx.ancestors(G, node)) # use numbers from full network
+        Gclip.node[node]['downstream'] = len(nx.descendants(G, node)) # use numbers from full network
+    nx.write_yaml(Gclip, str(target[1]))
     return 0
 
 
 def find_bifurs(source, target, env):
-    with rasterio.open(str(source[0], 'r')) as rast:
+    with rasterio.open(str(source[0]), 'r') as rast:
         rivers = rast.read(1)
         meta = rast.meta.copy()
 
@@ -313,7 +338,7 @@ def find_bifurs(source, target, env):
 
     pairs = np.array(pair_arrs).sum(axis=0)
 
-    bifurs = neighbors - pairs
+    bifurs = (neighbors - pairs).astype(np.uint8)
     # bifurs values:
     # 0: dry land
     # 1: river head or mouth
@@ -325,4 +350,268 @@ def find_bifurs(source, target, env):
     return 0
 
 
+def plot_network_map(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        bifurs = rast.read(1)
+        affine = rast.affine
+
+    mpl.style.use('ggplot')
+    fig, ax = plt.subplots(1,1, figsize=(8, 12), dpi=300)
+
+    pos = {node: G.node[node]['xy'] for node in G.node}
+    basin = np.array([G.node[node]['basin'] for node in G.node])
+    upstream = np.array([np.log(G.node[node]['upstream']+1) for node in G.node])
+
+    labels = {node: G.node[node]['cellid'] for node in G.node}
+    #labels = {node: node for node in G.node}
+    nx.draw_networkx(G, pos, node_size=(upstream*10), node_color=basin,
+            with_labels=True, labels=labels, font_size=6,
+            arrowsize=8, edge_color='.5',
+            cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
+    for t in ax.texts:
+        t.set_clip_on(False)
+
+    I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
+    xs, ys = affine * (I.flatten(), J.flatten())
+    X = xs.reshape(I.shape)
+    Y = ys.reshape(J.shape)
+
+    bifurs_mask = np.ma.masked_equal(bifurs, 0)
+    ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
+    ax.axis([X.min(), X.max(), Y.min(), Y.max()])
+    ax.set_aspect('equal')
+
+    fig.savefig(str(target[0]))
+    return 0
+
+
+def simple_bifurcations_OLD(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.affine
+    with rasterio.open(str(source[2]), 'r') as rast:
+        basins = rast.read(1)
+
+    nodes = [node for node in G.nodes()]
+    positions = [G.node[node]['xy'] for node in nodes]
+
+    minx, maxy = affine * (0,0)
+    maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
+
+    # remove network nodes outside delta domain
+    #for n, (px, py) in list(zip(nodes, positions)):
+        #if not ((minx < px < maxx) and (miny < py < maxy)):
+            #nodes.remove(n)
+            #positions.remove((px,py))
+
+    # loop over river pixels, find nearest node
+    wet = np.where(rivers>0)
+    nearestnode = {}
+    for j,i in zip(*wet):
+        x, y = affine * (i,j)
+        mindist = np.inf
+        for idx, (px, py) in enumerate(positions):
+            dist = np.sqrt((px-x)**2 + (py-y)**2)
+            if dist < mindist:
+                mindist = dist
+                minidx = idx
+        nearestnode[(j,i)] = nodes[minidx] #(px,py)
+
+    nearestriv = {}
+    for idx, (px, py) in enumerate(positions):
+        mindist = np.inf
+        for j,i in zip(*wet):
+            x, y = affine * (i,j)
+            dist = np.sqrt((px-x)**2 + (py-y)**2)
+            if dist < mindist:
+                mindist = dist
+                minji = (j,i)
+        nearestriv[nodes[idx]] = minji
+
+    nodesonriv = set(nearestnodes.values())
+
+# TODO - walk river from top to bottom, find where river meets new basin. bifurcate there!
+# also TODO - check in WBM/MFlib for cycles? pretty sure a cycle would mess the sorting up since the recursive travel calc would never complete. maybe check if 100% of the flow is diverted, and if so delete the original downlink? Just avoid cycles here for now.
+
+    # find node on river with largest "upstream"
+    maxnupstream = -np.inf
+    #for node in nodes:
+    for node in nearestnode.values():
+        #if node in nearestriv:
+        nupcells = G.node[node]['upstream']
+        if nupcells > maxnupstream:
+            maxnupstream = nupcells
+            maxnupnode = node
+    curnode = maxnupnode
+    # curnode should now be downstream-most node on OSM river
+
+    #import ipdb;ipdb.set_trace() # TODO code here can diverge from OSM river
+    # TODO: also an issue where nearest node isn't actually on the mainstem, and a close but larger node should be considered as "nearest". need some scoring function to asses how far away is still ok.
+    while True:
+        maxnupstream = -np.inf
+        for upcell in G.predecessors(curnode):
+            upcellupstream = G.nodes[upcell]['upstream']
+            if (ipcellupstream in upcellupstream) > maxnupstream:
+                maxnupstream = upcellupstream
+                nextnode = upcell
+        if maxnupstream == -np.inf:
+            break
+        curnode = nextnode
+    # curnode should now be upstream-most node on OSM river.
+    topnode = curnode
+
+    (j,i) = nearestriv[topnode] # ASSUME THIS IS ON MAIN BASIN. other way?
+    mainbasin = basins[j,i] # ASSUMING THIS IS MAIN BASIN
+
+    offbasin = []
+    for (j,i) in zip(*wet):
+        if basins[j,i] != mainbasin:
+            offbasin.append((j,i))
+
+    # nodes for those river pixels not on main basin
+    offnodes = [(nearestnode[(j,i)], basins[j,i]) for (j,i) in offbasin]
+
+    otherbasins = {n[1] for n in offnodes}
+    for otherbasin in otherbasins:
+        othernodes = [offnode[0] for offnode in offbasin if offnode[1] == otherbasin]
+        maxndown = -np.inf
+        for othernode in othernodes:
+            ndown = G.nodes[othernode]['downstream']
+            if ndown > maxndown:
+                maxndown = ndown
+                topbasinnode = othernode
+        # find nearest source node. start at top
+        curnode = topnode
+        mindist = np.inf
+        while True:
+            curnode = G.descendants(curnode)[0]
+            topbasinxy = G.nodes[topbasinnode]['xy']
+            curnodexy = G.nodes[curnode]['xy']
+            dist = np.sqrt((topbasinxy[0] - curnodexy[0])**2 + (topbasinxy[1] - curnodexy[1])**2)
+            if dist < mindist:
+                mindist = dist
+                nearestmainstemnode = curnode
+        print("Fill basin", otherbasin, ": divert from", nearestmainstemnode, "to", topbasinnode)
+        with open(str(target[0]), 'a') as fout:
+            fout.write('{0}, {1}, 0.5\n'.format(G.nodes[nearestmainstemnode]['cellid']+1, G.nodes[topbasinnode]['cellid']+1))
+
+    return 0
+
+
+def _find_largest_node_i(rivxy, positions, nupstream, nodemask, resolution, searchradius):
+    rivx, rivy = rivxy
+    dists = [np.sqrt((rivx - nodex)**2 + (rivy - nodey)**2) for (nodex, nodey) in positions]
+    score = []
+    for d, n, oknode in zip(dists, nupstream, nodemask):
+        if oknode and d<(resolution * searchradius):
+            score.append(n)
+        else:
+            score.append(-1)
+    if np.max(score) == -1:
+        return None
+    return np.argmax(score)
+
+def _find_nearest_node_i(rivxy, positions, nodemask):
+    rivx, rivy = rivxy
+    dists = [np.sqrt((rivx - nodex)**2 + (rivy - nodey)**2) for (nodex, nodey) in positions]
+    score = []
+    for i, (d, oknode) in enumerate(zip(dists, nodemask)):
+        if oknode:
+            score.append(d)
+        else:
+            score.append(np.inf)
+    return np.argmin(score)
+
+def simple_bifurcations(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.affine
+    with rasterio.open(str(source[2]), 'r') as rast:
+        basins = rast.read(1)
+
+    nodes = [node for node in G.nodes()]
+    positions = [G.node[node]['xy'] for node in nodes]
+    nupstream = [G.node[node]['upstream'] for node in nodes]
+    ndownstream = [G.node[node]['downstream'] for node in nodes]
+    nodebasins = [G.node[node]['basin'] for node in G.node]
+    cellid = [G.node[node]['cellid'] for node in G.node]
+
+    p0 = positions[0]
+    resolution = np.min([np.sqrt((p0[0]-p[0])**2 + (p0[1]-p[1])**2) for p in positions[1:]])
+
+    minx, maxy = affine * (0,0)
+    maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
+
+    mouthnodei = np.argmax(nupstream)
+    mouthnode = nodes[mouthnodei]
+    mainbasin = basins[mouthnode[1], mouthnode[0]]
+    mainbasinmask = [b == mainbasin for b in nodebasins]
+    allbasinmask = [1 for b in nodebasins]
+
+    #nearestmainnode = {}
+    #wet = np.where(rivers>0)
+    #for j, i in zip(*wet):
+        #xy = affine * (i,j)
+        #nearest_node_i = _find_nearest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
+        #nearestmainnode[(j,i)] = nodes[nearest_node_i]
+
+    # find upstream most river point
+    endpoints = np.where(rivers==1)
+    maxdownstream = -np.inf
+    headnode_i = None
+    head_endpoint_i = None
+    for ii, (j, i) in enumerate(zip(*endpoints)):
+        xy = affine * (i,j)
+        largest_near_node_i = _find_largest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
+        if largest_near_node_i is not None:
+            if ndownstream[largest_near_node_i] > maxdownstream:
+                maxdownstream = ndownstream[largest_near_node_i]
+                headnode_i = largest_near_node_i
+                head_endpoint_i = ii
+    headnode = nodes[headnode_i]
+
+    # walk down nodes to identify mainstem nodes
+    mainstem_nodes = [headnode]
+    to_visit = list(G.successors(headnode))
+    while to_visit:
+        node = to_visit.pop()
+        mainstem_nodes.append(node)
+        downstream = list(G.successors(node))
+        to_visit.extend(downstream)
+    mainstem_mask = [n in mainstem_nodes for n in nodes]
+
+    # walk down river
+    bifurcations = {}
+    visited = set()
+    to_visit = [((endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i]), headnode_i)] # riv point, last node index
+    while to_visit:
+        (rivj, rivi), last_node_i = to_visit.pop(0)
+        visited.add((rivj, rivi))
+
+        xy = affine * (rivi,rivj)
+        this_node_i = _find_largest_node_i(xy, positions, nupstream, allbasinmask, resolution, 2)
+        this_node_basin = nodebasins[this_node_i]
+        if (this_node_basin != nodebasins[last_node_i]) and (nodebasins[last_node_i] == mainbasin): # only allows bifurs from mainstem
+            mainstem_source_i = _find_nearest_node_i(xy, positions, mainstem_mask)
+            from_cell = cellid[mainstem_source_i]
+            to_cell = cellid[this_node_i]
+            if (from_cell, to_cell) not in bifurcations:
+                bifurcations[(from_cell, to_cell)] = .5 #assumes from_cell is currently at 1. need to track?
+                print('Bifurcation: cellid {0} to {1}'.format(from_cell, to_cell))
+
+        for dj in [-1,0,1]:
+            for di in [-1,0,1]:
+                rivj2 = rivj + dj
+                rivi2 = rivi + di
+                if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
+                    to_visit.append(((rivj2, rivi2), this_node_i))
+
+    with open(str(target[0]), 'w', newline='') as fout:
+        csvwriter = csv.writer(fout)
+        for (from_cell, to_cell), frac in bifurcations.items():
+            csvwriter.writerow([from_cell, to_cell, frac])
+    return 0
 

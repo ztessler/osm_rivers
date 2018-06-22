@@ -45,7 +45,7 @@ delta = os.environ.get('DELTA', 'Mekong')
 OSMriver = os.environ.get('OSMriver', 'vietnam')
 STNres = os.environ.get('STNres', '06min')
 
-STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
+STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
 OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
@@ -122,7 +122,7 @@ network = os.path.join(work, '{0}_{1}_network.gdbn'.format(delta, STNres))
 env.Command(
         source=STNnetwork,
         target=network,
-        action=GHAASBIN+'tblAddIdXY $SOURCE $TARGET')
+        action=os.path.join(GHAASBIN, 'tblAddIdXY') + ' $SOURCE $TARGET')
 
 # import RGIS network
 cellid = os.path.join(work, '{0}_{1}_cellid.{{ext}}'.format(delta, STNres))
@@ -135,21 +135,34 @@ for (path, varname) in [(cellid, 'CellID'),
             source=network,
             target=path.format(ext='nc'),
             action=[
-                'netCells2Grid -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, delta),
-                'grdRenameLayers -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
-                'grdDateLayers -y 1 -e day ${TARGET}.2 ${TARGET}.3',
-                'rgis2netcdf ${TARGET}.3 $TARGET'])
+                os.path.join(GHAASBIN,'netCells2Grid') + ' -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, delta),
+                os.path.join(GHAASBIN, 'grdRenameLayers') + ' -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
+                os.path.join(GHAASBIN, 'grdDateLayers') + ' -y 1 -e day ${TARGET}.2 ${TARGET}.3',
+                os.path.join(GHAASBIN, 'rgis2netcdf') + ' ${TARGET}.3 $TARGET'])
     env.Command(
             source=path.format(ext='nc'),
             target=path.format(ext='tif'),
             action=lib.georef_nc)
 
 network = os.path.join(work, '{0}_{1}_network.nx.yaml'.format(delta, STNres))
+networkdelta = os.path.join(work, '{0}_{1}_network_delta.nx.yaml'.format(delta, STNres))
 env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
                 flowdir.format(ext='tif'),
+                bifur_grid,
                 proj4str],
-        target=network,
+        target=[network, networkdelta],
         action=lib.import_rgis_network)
 
+env.Command(
+        source=[networkdelta, bifur_grid],
+        target='output/{0}_{1}_map.png'.format(delta, STNres),
+        action=lib.plot_network_map)
+
+
+bifurs='output/bifurcations.csv'
+env.Command(
+        source=[networkdelta, bifur_grid, basins.format(ext='tif')],
+        target=bifurs,
+        action=lib.simple_bifurcations) # fabios idea, just link neighboring small basins at most upstream, nearest cell to mainstem. maybe also limit to places where river skeleton shows bifurs
