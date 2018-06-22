@@ -158,7 +158,9 @@ env.Command(
 env.Command(
         source=[networkdelta, bifur_grid],
         target='output/{0}_{1}_map.png'.format(delta, STNres),
-        action=lib.plot_network_map)
+        action=[lib.plot_network_map,
+                'convert -trim $TARGET $TARGET'],
+            )
 
 
 bifurs='output/bifurcations.csv'
