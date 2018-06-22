@@ -13,7 +13,7 @@ from scipy.ndimage.filters import generic_filter
 from netCDF4 import Dataset
 import pyproj
 import itertools
-
+from collections import defaultdict
 
 def project_and_clip_osm_rivers(source, target, env):
     rivers_ll = geopandas.read_file(str(source[0]))
@@ -371,6 +371,7 @@ def plot_network_map(source, target, env):
             cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
     for t in ax.texts:
         t.set_clip_on(False)
+        #t.set_rotation(20)
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
@@ -386,118 +387,118 @@ def plot_network_map(source, target, env):
     return 0
 
 
-def simple_bifurcations_OLD(source, target, env):
-    G = nx.read_yaml(str(source[0]))
-    with rasterio.open(str(source[1]), 'r') as rast:
-        rivers = rast.read(1)
-        affine = rast.affine
-    with rasterio.open(str(source[2]), 'r') as rast:
-        basins = rast.read(1)
+#def simple_bifurcations_OLD(source, target, env):
+    #G = nx.read_yaml(str(source[0]))
+    #with rasterio.open(str(source[1]), 'r') as rast:
+        #rivers = rast.read(1)
+        #affine = rast.affine
+    #with rasterio.open(str(source[2]), 'r') as rast:
+        #basins = rast.read(1)
 
-    nodes = [node for node in G.nodes()]
-    positions = [G.node[node]['xy'] for node in nodes]
+    #nodes = [node for node in G.nodes()]
+    #positions = [G.node[node]['xy'] for node in nodes]
 
-    minx, maxy = affine * (0,0)
-    maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
+    #minx, maxy = affine * (0,0)
+    #maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
 
-    # remove network nodes outside delta domain
-    #for n, (px, py) in list(zip(nodes, positions)):
-        #if not ((minx < px < maxx) and (miny < py < maxy)):
-            #nodes.remove(n)
-            #positions.remove((px,py))
+    ## remove network nodes outside delta domain
+    ##for n, (px, py) in list(zip(nodes, positions)):
+        ##if not ((minx < px < maxx) and (miny < py < maxy)):
+            ##nodes.remove(n)
+            ##positions.remove((px,py))
 
-    # loop over river pixels, find nearest node
-    wet = np.where(rivers>0)
-    nearestnode = {}
-    for j,i in zip(*wet):
-        x, y = affine * (i,j)
-        mindist = np.inf
-        for idx, (px, py) in enumerate(positions):
-            dist = np.sqrt((px-x)**2 + (py-y)**2)
-            if dist < mindist:
-                mindist = dist
-                minidx = idx
-        nearestnode[(j,i)] = nodes[minidx] #(px,py)
+    ## loop over river pixels, find nearest node
+    #wet = np.where(rivers>0)
+    #nearestnode = {}
+    #for j,i in zip(*wet):
+        #x, y = affine * (i,j)
+        #mindist = np.inf
+        #for idx, (px, py) in enumerate(positions):
+            #dist = np.sqrt((px-x)**2 + (py-y)**2)
+            #if dist < mindist:
+                #mindist = dist
+                #minidx = idx
+        #nearestnode[(j,i)] = nodes[minidx] #(px,py)
 
-    nearestriv = {}
-    for idx, (px, py) in enumerate(positions):
-        mindist = np.inf
-        for j,i in zip(*wet):
-            x, y = affine * (i,j)
-            dist = np.sqrt((px-x)**2 + (py-y)**2)
-            if dist < mindist:
-                mindist = dist
-                minji = (j,i)
-        nearestriv[nodes[idx]] = minji
+    #nearestriv = {}
+    #for idx, (px, py) in enumerate(positions):
+        #mindist = np.inf
+        #for j,i in zip(*wet):
+            #x, y = affine * (i,j)
+            #dist = np.sqrt((px-x)**2 + (py-y)**2)
+            #if dist < mindist:
+                #mindist = dist
+                #minji = (j,i)
+        #nearestriv[nodes[idx]] = minji
 
-    nodesonriv = set(nearestnodes.values())
+    #nodesonriv = set(nearestnodes.values())
 
-# TODO - walk river from top to bottom, find where river meets new basin. bifurcate there!
-# also TODO - check in WBM/MFlib for cycles? pretty sure a cycle would mess the sorting up since the recursive travel calc would never complete. maybe check if 100% of the flow is diverted, and if so delete the original downlink? Just avoid cycles here for now.
+## TODO - walk river from top to bottom, find where river meets new basin. bifurcate there!
+## also TODO - check in WBM/MFlib for cycles? pretty sure a cycle would mess the sorting up since the recursive travel calc would never complete. maybe check if 100% of the flow is diverted, and if so delete the original downlink? Just avoid cycles here for now.
 
-    # find node on river with largest "upstream"
-    maxnupstream = -np.inf
-    #for node in nodes:
-    for node in nearestnode.values():
-        #if node in nearestriv:
-        nupcells = G.node[node]['upstream']
-        if nupcells > maxnupstream:
-            maxnupstream = nupcells
-            maxnupnode = node
-    curnode = maxnupnode
-    # curnode should now be downstream-most node on OSM river
+    ## find node on river with largest "upstream"
+    #maxnupstream = -np.inf
+    ##for node in nodes:
+    #for node in nearestnode.values():
+        ##if node in nearestriv:
+        #nupcells = G.node[node]['upstream']
+        #if nupcells > maxnupstream:
+            #maxnupstream = nupcells
+            #maxnupnode = node
+    #curnode = maxnupnode
+    ## curnode should now be downstream-most node on OSM river
 
-    #import ipdb;ipdb.set_trace() # TODO code here can diverge from OSM river
-    # TODO: also an issue where nearest node isn't actually on the mainstem, and a close but larger node should be considered as "nearest". need some scoring function to asses how far away is still ok.
-    while True:
-        maxnupstream = -np.inf
-        for upcell in G.predecessors(curnode):
-            upcellupstream = G.nodes[upcell]['upstream']
-            if (ipcellupstream in upcellupstream) > maxnupstream:
-                maxnupstream = upcellupstream
-                nextnode = upcell
-        if maxnupstream == -np.inf:
-            break
-        curnode = nextnode
-    # curnode should now be upstream-most node on OSM river.
-    topnode = curnode
+    ##import ipdb;ipdb.set_trace() # TODO code here can diverge from OSM river
+    ## TODO: also an issue where nearest node isn't actually on the mainstem, and a close but larger node should be considered as "nearest". need some scoring function to asses how far away is still ok.
+    #while True:
+        #maxnupstream = -np.inf
+        #for upcell in G.predecessors(curnode):
+            #upcellupstream = G.nodes[upcell]['upstream']
+            #if (ipcellupstream in upcellupstream) > maxnupstream:
+                #maxnupstream = upcellupstream
+                #nextnode = upcell
+        #if maxnupstream == -np.inf:
+            #break
+        #curnode = nextnode
+    ## curnode should now be upstream-most node on OSM river.
+    #topnode = curnode
 
-    (j,i) = nearestriv[topnode] # ASSUME THIS IS ON MAIN BASIN. other way?
-    mainbasin = basins[j,i] # ASSUMING THIS IS MAIN BASIN
+    #(j,i) = nearestriv[topnode] # ASSUME THIS IS ON MAIN BASIN. other way?
+    #mainbasin = basins[j,i] # ASSUMING THIS IS MAIN BASIN
 
-    offbasin = []
-    for (j,i) in zip(*wet):
-        if basins[j,i] != mainbasin:
-            offbasin.append((j,i))
+    #offbasin = []
+    #for (j,i) in zip(*wet):
+        #if basins[j,i] != mainbasin:
+            #offbasin.append((j,i))
 
-    # nodes for those river pixels not on main basin
-    offnodes = [(nearestnode[(j,i)], basins[j,i]) for (j,i) in offbasin]
+    ## nodes for those river pixels not on main basin
+    #offnodes = [(nearestnode[(j,i)], basins[j,i]) for (j,i) in offbasin]
 
-    otherbasins = {n[1] for n in offnodes}
-    for otherbasin in otherbasins:
-        othernodes = [offnode[0] for offnode in offbasin if offnode[1] == otherbasin]
-        maxndown = -np.inf
-        for othernode in othernodes:
-            ndown = G.nodes[othernode]['downstream']
-            if ndown > maxndown:
-                maxndown = ndown
-                topbasinnode = othernode
-        # find nearest source node. start at top
-        curnode = topnode
-        mindist = np.inf
-        while True:
-            curnode = G.descendants(curnode)[0]
-            topbasinxy = G.nodes[topbasinnode]['xy']
-            curnodexy = G.nodes[curnode]['xy']
-            dist = np.sqrt((topbasinxy[0] - curnodexy[0])**2 + (topbasinxy[1] - curnodexy[1])**2)
-            if dist < mindist:
-                mindist = dist
-                nearestmainstemnode = curnode
-        print("Fill basin", otherbasin, ": divert from", nearestmainstemnode, "to", topbasinnode)
-        with open(str(target[0]), 'a') as fout:
-            fout.write('{0}, {1}, 0.5\n'.format(G.nodes[nearestmainstemnode]['cellid']+1, G.nodes[topbasinnode]['cellid']+1))
+    #otherbasins = {n[1] for n in offnodes}
+    #for otherbasin in otherbasins:
+        #othernodes = [offnode[0] for offnode in offbasin if offnode[1] == otherbasin]
+        #maxndown = -np.inf
+        #for othernode in othernodes:
+            #ndown = G.nodes[othernode]['downstream']
+            #if ndown > maxndown:
+                #maxndown = ndown
+                #topbasinnode = othernode
+        ## find nearest source node. start at top
+        #curnode = topnode
+        #mindist = np.inf
+        #while True:
+            #curnode = G.descendants(curnode)[0]
+            #topbasinxy = G.nodes[topbasinnode]['xy']
+            #curnodexy = G.nodes[curnode]['xy']
+            #dist = np.sqrt((topbasinxy[0] - curnodexy[0])**2 + (topbasinxy[1] - curnodexy[1])**2)
+            #if dist < mindist:
+                #mindist = dist
+                #nearestmainstemnode = curnode
+        #print("Fill basin", otherbasin, ": divert from", nearestmainstemnode, "to", topbasinnode)
+        #with open(str(target[0]), 'a') as fout:
+            #fout.write('{0}, {1}, 0.5\n'.format(G.nodes[nearestmainstemnode]['cellid']+1, G.nodes[topbasinnode]['cellid']+1))
 
-    return 0
+    #return 0
 
 
 def _find_largest_node_i(rivxy, positions, nupstream, nodemask, resolution, searchradius):
@@ -551,12 +552,12 @@ def simple_bifurcations(source, target, env):
     mainbasinmask = [b == mainbasin for b in nodebasins]
     allbasinmask = [1 for b in nodebasins]
 
-    #nearestmainnode = {}
-    #wet = np.where(rivers>0)
-    #for j, i in zip(*wet):
-        #xy = affine * (i,j)
-        #nearest_node_i = _find_nearest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
-        #nearestmainnode[(j,i)] = nodes[nearest_node_i]
+    nearestnode_to_riv = {}
+    wet = np.where(rivers>0)
+    for j, i in zip(*wet):
+        xy = affine * (i,j)
+        nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
+        nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
 
     # find upstream most river point
     endpoints = np.where(rivers==1)
@@ -583,8 +584,9 @@ def simple_bifurcations(source, target, env):
         to_visit.extend(downstream)
     mainstem_mask = [n in mainstem_nodes for n in nodes]
 
+    import ipdb;ipdb.set_trace()
     # walk down river
-    bifurcations = {}
+    bifurcations = defaultdict(set)
     visited = set()
     to_visit = [((endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i]), headnode_i)] # riv point, last node index
     while to_visit:
@@ -596,11 +598,27 @@ def simple_bifurcations(source, target, env):
         this_node_basin = nodebasins[this_node_i]
         if (this_node_basin != nodebasins[last_node_i]) and (nodebasins[last_node_i] == mainbasin): # only allows bifurs from mainstem
             mainstem_source_i = _find_nearest_node_i(xy, positions, mainstem_mask)
+
+            from_node = nodes[mainstem_source_i]
             from_cell = cellid[mainstem_source_i]
+            to_node = nodes[this_node_i]
             to_cell = cellid[this_node_i]
-            if (from_cell, to_cell) not in bifurcations:
-                bifurcations[(from_cell, to_cell)] = .5 #assumes from_cell is currently at 1. need to track?
+
+            # to_cell may have overshot most-upstream subbasin. walk upstream to get closer to from_cell
+            mindist = np.sqrt((from_node[0]-to_node[0])**2 + (from_node[1]-to_node[1])**2)
+            upnodes = list(G.predecessors(nodes[this_node_i]))
+            while upnodes:
+                upnode = upnodes.pop(0)
+                if upnode in nearestnode_to_riv.values():
+                    dist = np.sqrt((from_node[0]-upnode[0])**2 + (from_node[1]-upnode[1])**2)
+                    if dist < mindist:
+                        mindist = dist
+                        to_cell = G.nodes[upnode]['cellid']
+                        upnodes.extend(G.predecessors(upnode))
+
+            if to_cell not in bifurcations[from_cell]:
                 print('Bifurcation: cellid {0} to {1}'.format(from_cell, to_cell))
+            bifurcations[from_cell].add(to_cell)
 
         for dj in [-1,0,1]:
             for di in [-1,0,1]:
@@ -611,7 +629,9 @@ def simple_bifurcations(source, target, env):
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
-        for (from_cell, to_cell), frac in bifurcations.items():
-            csvwriter.writerow([from_cell, to_cell, frac])
+        for (from_cell, to_cells) in bifurcations.items():
+            frac = 1/(len(to_cells)+1) # add one to account for original downstream link
+            for to_cell in to_cells:
+                csvwriter.writerow([from_cell, to_cell, frac])
     return 0
 
