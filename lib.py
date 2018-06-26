@@ -589,7 +589,6 @@ def simple_bifurcations(source, target, env):
         to_visit.extend(downstream)
     mainstem_mask = [n in mainstem_nodes for n in nodes]
 
-    import ipdb;ipdb.set_trace()
     # walk down river
     bifurcations = defaultdict(set)
     visited = set()
@@ -601,7 +600,7 @@ def simple_bifurcations(source, target, env):
         xy = affine * (rivi,rivj)
         this_node_i = _find_largest_node_i(xy, positions, nupstream, allbasinmask, resolution, 2)
         this_node_basin = nodebasins[this_node_i]
-        if (this_node_basin != nodebasins[last_node_i]) and (nodebasins[last_node_i] == mainbasin): # only allows bifurs from mainstem
+        if (this_node_basin != nodebasins[last_node_i]) and (nodebasins[last_node_i] == mainbasin): # only allows bifurs from mainstem # TODO change somehow to allow multiple branches?
             mainstem_source_i = _find_nearest_node_i(xy, positions, mainstem_mask)
 
             from_node = nodes[mainstem_source_i]
@@ -640,3 +639,168 @@ def simple_bifurcations(source, target, env):
                 csvwriter.writerow([from_cell, to_cell, frac])
     return 0
 
+
+def remap_riv_network(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.affine
+    with rasterio.open(str(source[2]), 'r') as rast:
+        basins = rast.read(1)
+
+    nodes = [node for node in G.nodes()]
+    positions = [G.node[node]['xy'] for node in nodes]
+    nupstream = [G.node[node]['upstream'] for node in nodes]
+    ndownstream = [G.node[node]['downstream'] for node in nodes]
+    nodebasins = [G.node[node]['basin'] for node in G.node]
+    cellid = [G.node[node]['cellid'] for node in G.node]
+
+    p0 = positions[0]
+    resolution = np.min([np.sqrt((p0[0]-p[0])**2 + (p0[1]-p[1])**2) for p in positions[1:]])
+
+    minx, maxy = affine * (0,0)
+    maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
+
+    mouthnodei = np.argmax(nupstream)
+    mouthnode = nodes[mouthnodei]
+    mainbasin = basins[mouthnode[1], mouthnode[0]]
+    mainbasinmask = [b == mainbasin for b in nodebasins]
+    allbasinmask = [1 for b in nodebasins]
+
+    nearestnode_to_riv = {}
+    wet = np.where(rivers>0)
+    for j, i in zip(*wet):
+        xy = affine * (i,j)
+        nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
+        nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
+
+    # find upstream most river point
+    endpoints = np.where(rivers==1)
+    maxdownstream = -np.inf
+    headnode_i = None
+    head_endpoint_i = None
+    for ii, (j, i) in enumerate(zip(*endpoints)):
+        xy = affine * (i,j)
+        largest_near_node_i = _find_largest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
+        if largest_near_node_i is not None:
+            if ndownstream[largest_near_node_i] > maxdownstream:
+                maxdownstream = ndownstream[largest_near_node_i]
+                headnode_i = largest_near_node_i
+                head_endpoint_i = ii
+    headnode = nodes[headnode_i]
+
+    initial_branch = 'a'
+    next_branch = 'b'
+    initial_riv_pt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
+    initial_node = nearestnode_to_riv[initial_riv_pt]
+    initial_node_i = nodes.index(initial_node)
+    G.nodes[initial_node]['branches'] = {initial_branch}
+
+    # walk down river
+    edits = defaultdict(dict)
+    visited = set()
+    #to_visit = [((endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i]), headnode_i, 'a')] # riv point, last node index, branch
+    to_visit = [(initial_riv_pt, initial_node_i, initial_branch)]
+    import ipdb;ipdb.set_trace()
+    while to_visit:
+        (rivj, rivi), last_node_i, branch = to_visit.pop(0)
+        xy = affine * (rivi,rivj)
+        last_node = nodes[last_node_i]
+        last_cell = cellid[last_node_i]
+        visited.add((rivj, rivi))
+
+        #cur_next_nodes = list(G.successors(last_node))
+        #assert len(cur_next_nodes)==1 # need to think more on if multiple downlinks
+
+        next_node = nearestnode_to_riv[(rivj,rivi)]
+        next_node_i = nodes.index(next_node)
+        next_cell = cellid[next_node_i]
+        dist = np.sqrt((xy[0]-positions[next_node_i][0])**2 + (xy[1]-positions[next_node_i][1])**2)
+
+        #if len(branch) > len(G.nodes[last_node]['branch']): # new branch, need to find next closest node
+            #mask = allbasinmask.copy()
+            #xy = affine * (rivi,rivj)
+            #while 'branch' in G.nodes[next_node]:
+                #mask[nodes.index(next_node)] = 0
+                #next_node_i = _find_nearest_node_i(xy, positions, mask)
+                #next_node = nodes[next_node_i]
+                #next_cell = cellid[next_node_i]
+
+        print(branch, cellid[last_node_i], cellid[next_node_i], end=', ')
+
+        if ((next_node != last_node) and # moving to new node
+            (dist < resolution/2) and # helps reduce zig-zag #TODO other distance measure??
+            #(next_node not in cur_next_nodes) and # and new node isn't where water already goes
+            (next_node not in nx.ancestors(G, last_node))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, i think should work out, just goes to next downstream node
+
+            print('Branch', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+            if 'branches' not in G.nodes[next_node]:
+                G.nodes[next_node]['branches'] = {branch}
+            else:
+                G.nodes[next_node]['branches'].add(branch)
+            edits[last_cell][next_cell] = branch
+            for downstream_node in list(G.successors(last_node)):
+                downstream_cell = cellid[nodes.index(downstream_node)]
+                if downstream_cell not in edits[last_cell]:
+                    G.remove_edge(last_node, downstream_node)
+                    edits[last_cell][downstream_cell] = None
+            G.add_edge(last_node, next_node)
+            dummy=4
+
+            #if branch not in G.nodes[last_node]['branches']: # bifurcation, multiple brances
+                #if last_cell in edits: # adjust to make room for new branch
+                    #n_branches = len(edits[last_cell]) + 1
+                #else: # other branch is existing edge
+                    #n_branches = 2
+                #weight = 1/n
+                #for other_branch in edits[last_cell]:
+                    #edits[last_cell][other_branch] = weight
+            #else: # no bifurcation, just reroute
+                #assert len(cur_next_nodes) == 1
+                #edits[last_cell][cellid[nodes.index(cur_next_nodes[0])]] = 0
+                #G.remove_edge(last_node, cur_next_nodes[0])
+            #edits[last_cell][next_cell] = weight
+            #G.add_edge(last_node, next_node) # edit network so successors, ancestors stay up-to-date
+            #G.nodes[next_node]['branch'] = branch
+            ## TODO haven't handled what happens when river bifurcates. tracking branches, but need to make sure that bifurcated rivers go to different nodes (which might rejoin later)
+        elif ((dist >= resolution/2) or # TODO remove this?? other measure??
+              (next_node in nx.ancestors(G, last_node))):
+            # dont step to next node, skip it by waiting until a different node is closest to river
+            next_node = last_node
+            next_node_i = last_node_i
+            next_cell = last_cell
+        #elif (next_node in cur_next_nodes): # go along exising route
+            #G.nodes[next_node]['branch'] = branch
+
+        second_branch = False
+        for dj in [-1,0,1]:
+            for di in [-1,0,1]:
+                rivj2 = rivj + dj
+                rivi2 = rivi + di
+                if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
+                    if second_branch:
+                        branch += next_branch
+                        next_branch = chr(ord(next_branch)+1)
+                    to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
+                    second_branch = True
+
+
+    with open(str(target[0]), 'w', newline='') as fout:
+        csvwriter = csv.writer(fout)
+        for (from_cell, to_cells) in edits.items():
+            try:
+                frac = 1/len([t for t,b in to_cells.items() if b is not None])
+            except ZeroDivisionError:
+                pass
+            for to_cell, branch in to_cells.items():
+                if branch is None:
+                    csvwriter.writerow([from_cell, to_cell, 0])
+                else:
+                    csvwriter.writerow([from_cell, to_cell, frac])
+
+    for node in G.nodes():
+        G.node[node]['upstream'] = len(nx.ancestors(G, node))
+        G.node[node]['downstream'] = len(nx.descendants(G, node))
+    nx.write_yaml(G, str(target[1]))
+
+    return 0
