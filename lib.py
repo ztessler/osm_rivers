@@ -233,6 +233,11 @@ def trim_short_rivs(source, target, env):
     for j,i in todelete:
         rivers[j,i] = 0
 
+    # rerun skeleton to clean corners where short segments were clipped off
+    skeleton, distance = morph.medial_axis(rivers, return_distance=True)
+    rivers = skeleton.astype(np.uint8)
+    rivers[rivers>0] = 1
+
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(rivers, 1)
     return 0
