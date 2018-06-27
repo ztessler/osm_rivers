@@ -701,7 +701,6 @@ def remap_riv_network(source, target, env):
     visited = set()
     #to_visit = [((endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i]), headnode_i, 'a')] # riv point, last node index, branch
     to_visit = [(initial_riv_pt, initial_node_i, initial_branch)]
-    import ipdb;ipdb.set_trace()
     while to_visit:
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
