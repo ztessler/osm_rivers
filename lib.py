@@ -754,7 +754,24 @@ def remap_riv_network(source, target, env):
                     G.remove_edge(last_node, downstream_node)
                     edits[last_cell][downstream_cell] = None
             G.add_edge(last_node, next_node)
-            dummy=4
+
+            # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
+            if ((abs(last_node[0]-next_node[0]) == 1) and
+                (abs(last_node[1]-next_node[1]) == 1)):
+                corner1_node = (next_node[0], last_node[1])
+                corner2_node = (last_node[0], next_node[1])
+                corner1_cell = cellid[nodes.index(corner1_node)]
+                corner2_cell = cellid[nodes.index(corner2_node)]
+                if (corner1_node in G.succ[corner2_node]):
+                    G.remove_edge(corner2_node, corner1_node)
+                    edits[corner2_cell][corner1_cell] = None
+                    G.add_edge(corner2_node, next_node)
+                    edits[corner2_node][next_cell] = 'XXX' # anything other than None
+                if (corner2_node in G.succ[corner1_node]):
+                    G.remove_edge(corner1_node, corner2_node)
+                    edits[corner1_cell][corner2_cell] = None
+                    G.add_edge(corner1_node, next_node)
+                    edits[corner1_node][next_cell] = 'XXX' # anything other than None
 
             #if branch not in G.nodes[last_node]['branches']: # bifurcation, multiple brances
                 #if last_cell in edits: # adjust to make room for new branch
@@ -792,7 +809,6 @@ def remap_riv_network(source, target, env):
                         next_branch = chr(ord(next_branch)+1)
                     to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
                     second_branch = True
-
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
