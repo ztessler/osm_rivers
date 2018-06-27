@@ -715,7 +715,6 @@ def remap_riv_network(source, target, env):
         next_node = nearestnode_to_riv[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
         next_cell = cellid[next_node_i]
-        dist = np.sqrt((xy[0]-positions[next_node_i][0])**2 + (xy[1]-positions[next_node_i][1])**2)
 
         #if len(branch) > len(G.nodes[last_node]['branch']): # new branch, need to find next closest node
             #mask = allbasinmask.copy()
@@ -728,8 +727,18 @@ def remap_riv_network(source, target, env):
 
         print(branch, cellid[last_node_i], cellid[next_node_i], end=', ')
 
+        dist = np.sqrt((xy[0]-positions[next_node_i][0])**2 + (xy[1]-positions[next_node_i][1])**2)
+        xriv, yriv = xy
+        xnode, ynode = positions[next_node_i]
+        # nearness determined by star-shape region around node. half resolution dist ensures all
+        # gridlines get captured, but second terms chops out region in middle. makes diagonal
+        # connections easier
+        riv_near_node = ((np.sqrt((xnode-xriv)**2 + (ynode-yriv)**2) <= (0.5 * resolution)) and
+                         (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.04))
+        #riv_near_node = np.sqrt((xnode-xriv)**2 + (ynode-yriv)**2) <= (0.5 * resolution)
+
         if ((next_node != last_node) and # moving to new node
-            (dist < resolution/2) and # helps reduce zig-zag #TODO other distance measure??
+            (riv_near_node) and # helps reduce zig-zag #TODO other distance measure??
             #(next_node not in cur_next_nodes) and # and new node isn't where water already goes
             (next_node not in nx.ancestors(G, last_node))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, i think should work out, just goes to next downstream node
 
@@ -763,7 +772,7 @@ def remap_riv_network(source, target, env):
             #G.add_edge(last_node, next_node) # edit network so successors, ancestors stay up-to-date
             #G.nodes[next_node]['branch'] = branch
             ## TODO haven't handled what happens when river bifurcates. tracking branches, but need to make sure that bifurcated rivers go to different nodes (which might rejoin later)
-        elif ((dist >= resolution/2) or # TODO remove this?? other measure??
+        elif ((not riv_near_node) or
               (next_node in nx.ancestors(G, last_node))):
             # dont step to next node, skip it by waiting until a different node is closest to river
             next_node = last_node
