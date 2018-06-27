@@ -155,21 +155,13 @@ env.Command(
         target=[network, networkdelta],
         action=lib.import_rgis_network)
 
-env.Command(
-        source=[networkdelta, bifur_grid],
-        target='output/{0}_{1}_map.png'.format(delta, STNres),
-        action=[lib.plot_network_map,
-                'convert -trim $TARGET $TARGET'],
-            )
-
-
-bifurs = os.path.join(output, 'bifurcations.csv')
+bifurs = os.path.join(output, delta, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
 env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
         target=bifurs,
         action=lib.simple_bifurcations) # finds where osm river hits a subbasin that isn't on the main basin, and creates a bifurcation there
 
-bifurs = os.path.join(output, 'bifurcations2.csv')
+bifurs = os.path.join(output, delta, '{0}_{1}_bifurcations.csv'.format(delta, STNres))
 bifurnetwork = os.path.join(work, '{0}_{1}_network_delta_bifur.nx.yaml'.format(delta, STNres))
 env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
@@ -177,8 +169,13 @@ env.Command(
         action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
 
 env.Command(
-        source=[bifurnetwork, bifur_grid],
-        target='output/{0}_{1}_bifur_map.png'.format(delta, STNres),
+        source=[networkdelta, bifur_grid],
+        target='output/{0}/{0}_{1}_map.png'.format(delta, STNres),
         action=[lib.plot_network_map,
-                'convert -trim $TARGET $TARGET'],
-            )
+                'convert -trim $TARGET $TARGET'])
+
+env.Command(
+        source=[bifurnetwork, bifur_grid],
+        target='output/{0}/{0}_{1}_bifur_map.png'.format(delta, STNres),
+        action=[lib.plot_network_map,
+                'convert -trim $TARGET $TARGET'])
