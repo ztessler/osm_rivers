@@ -765,12 +765,12 @@ def remap_riv_network(source, target, env):
                     G.remove_edge(corner2_node, corner1_node)
                     edits[corner2_cell][corner1_cell] = None
                     G.add_edge(corner2_node, next_node)
-                    edits[corner2_node][next_cell] = 'XXX' # anything other than None
+                    edits[corner2_cell][next_cell] = 'XXX' # anything other than None
                 if (corner2_node in G.succ[corner1_node]):
                     G.remove_edge(corner1_node, corner2_node)
                     edits[corner1_cell][corner2_cell] = None
                     G.add_edge(corner1_node, next_node)
-                    edits[corner1_node][next_cell] = 'XXX' # anything other than None
+                    edits[corner1_cell][next_cell] = 'XXX' # anything other than None
 
             #if branch not in G.nodes[last_node]['branches']: # bifurcation, multiple brances
                 #if last_cell in edits: # adjust to make room for new branch
