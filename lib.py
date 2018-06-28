@@ -634,7 +634,11 @@ def simple_bifurcations(source, target, env):
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
         for (from_cell, to_cells) in bifurcations.items():
-            frac = 1/(len(to_cells)+1) # add one to account for original downstream link
+            existing = list(G.successors(nodes[cellid.index(from_cell)]))
+            frac = 1/(len(to_cells) + len(existing))
+            for to_node in existing:
+                csvwriter.writerow([from_cell, cellid[nodes.index(to_node)], 0]) # zero out
+                csvwriter.writerow([from_cell, cellid[nodes.index(to_node)], frac]) # new amount
             for to_cell in to_cells:
                 csvwriter.writerow([from_cell, to_cell, frac])
     return 0
