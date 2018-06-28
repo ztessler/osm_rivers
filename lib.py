@@ -642,6 +642,7 @@ def simple_bifurcations(source, target, env):
 
 def remap_riv_network(source, target, env):
     G = nx.read_yaml(str(source[0]))
+    Gorig = G.copy()
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.affine
@@ -699,7 +700,6 @@ def remap_riv_network(source, target, env):
     # walk down river
     edits = defaultdict(dict)
     visited = set()
-    #to_visit = [((endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i]), headnode_i, 'a')] # riv point, last node index, branch
     to_visit = [(initial_riv_pt, initial_node_i, initial_branch)]
     while to_visit:
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
@@ -708,23 +708,9 @@ def remap_riv_network(source, target, env):
         last_cell = cellid[last_node_i]
         visited.add((rivj, rivi))
 
-        #cur_next_nodes = list(G.successors(last_node))
-        #assert len(cur_next_nodes)==1 # need to think more on if multiple downlinks
-
         next_node = nearestnode_to_riv[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
         next_cell = cellid[next_node_i]
-
-        #if len(branch) > len(G.nodes[last_node]['branch']): # new branch, need to find next closest node
-            #mask = allbasinmask.copy()
-            #xy = affine * (rivi,rivj)
-            #while 'branch' in G.nodes[next_node]:
-                #mask[nodes.index(next_node)] = 0
-                #next_node_i = _find_nearest_node_i(xy, positions, mask)
-                #next_node = nodes[next_node_i]
-                #next_cell = cellid[next_node_i]
-
-        print(branch, cellid[last_node_i], cellid[next_node_i], end=', ')
 
         dist = np.sqrt((xy[0]-positions[next_node_i][0])**2 + (xy[1]-positions[next_node_i][1])**2)
         xriv, yriv = xy
@@ -734,22 +720,21 @@ def remap_riv_network(source, target, env):
         # connections easier
         riv_near_node = ((np.sqrt((xnode-xriv)**2 + (ynode-yriv)**2) <= (0.5 * resolution)) and
                          (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.04))
-        #riv_near_node = np.sqrt((xnode-xriv)**2 + (ynode-yriv)**2) <= (0.5 * resolution)
 
         if ((next_node != last_node) and # moving to new node
-            (riv_near_node) and # helps reduce zig-zag #TODO other distance measure??
-            #(next_node not in cur_next_nodes) and # and new node isn't where water already goes
-            (next_node not in nx.ancestors(G, last_node))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, i think should work out, just goes to next downstream node
+            (riv_near_node) and # helps reduce zig-zag
+            (next_node not in nx.ancestors(G, last_node))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node
 
-            print('Branch', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
             if 'branches' not in G.nodes[next_node]:
                 G.nodes[next_node]['branches'] = {branch}
             else:
                 G.nodes[next_node]['branches'].add(branch)
+            print('\nNew:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
             edits[last_cell][next_cell] = branch
             for downstream_node in list(G.successors(last_node)):
                 downstream_cell = cellid[nodes.index(downstream_node)]
-                if downstream_cell not in edits[last_cell]:
+                if (downstream_cell not in edits[last_cell]):
+                    print('Remove:', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
                     G.remove_edge(last_node, downstream_node)
                     edits[last_cell][downstream_cell] = None
             G.add_edge(last_node, next_node)
@@ -772,30 +757,12 @@ def remap_riv_network(source, target, env):
                     G.add_edge(corner1_node, next_node)
                     edits[corner1_cell][next_cell] = 'XXX' # anything other than None
 
-            #if branch not in G.nodes[last_node]['branches']: # bifurcation, multiple brances
-                #if last_cell in edits: # adjust to make room for new branch
-                    #n_branches = len(edits[last_cell]) + 1
-                #else: # other branch is existing edge
-                    #n_branches = 2
-                #weight = 1/n
-                #for other_branch in edits[last_cell]:
-                    #edits[last_cell][other_branch] = weight
-            #else: # no bifurcation, just reroute
-                #assert len(cur_next_nodes) == 1
-                #edits[last_cell][cellid[nodes.index(cur_next_nodes[0])]] = 0
-                #G.remove_edge(last_node, cur_next_nodes[0])
-            #edits[last_cell][next_cell] = weight
-            #G.add_edge(last_node, next_node) # edit network so successors, ancestors stay up-to-date
-            #G.nodes[next_node]['branch'] = branch
-            ## TODO haven't handled what happens when river bifurcates. tracking branches, but need to make sure that bifurcated rivers go to different nodes (which might rejoin later)
         elif ((not riv_near_node) or
               (next_node in nx.ancestors(G, last_node))):
             # dont step to next node, skip it by waiting until a different node is closest to river
             next_node = last_node
             next_node_i = last_node_i
             next_cell = last_cell
-        #elif (next_node in cur_next_nodes): # go along exising route
-            #G.nodes[next_node]['branch'] = branch
 
         second_branch = False
         for dj in [-1,0,1]:
@@ -817,10 +784,17 @@ def remap_riv_network(source, target, env):
             except ZeroDivisionError:
                 pass
             for to_cell, branch in to_cells.items():
-                if branch is None:
+                from_node = nodes[cellid.index(from_cell)]
+                to_node = nodes[cellid.index(to_cell)]
+                successors = list(Gorig.successors(from_node))
+                if branch is None: # zero out for removed links
                     csvwriter.writerow([from_cell, to_cell, 0])
                 else:
-                    csvwriter.writerow([from_cell, to_cell, frac])
+                    if ((to_node in successors) and (frac != 1)): # zero out if single downlink changing to multiple
+                        csvwriter.writerow([from_cell, to_cell, 0])
+                    if ((to_node not in successors) or # record new link
+                        (frac != 1)): # record if fractional flux
+                        csvwriter.writerow([from_cell, to_cell, frac])
 
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
