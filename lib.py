@@ -733,7 +733,7 @@ def remap_riv_network(source, target, env):
                 G.nodes[next_node]['branches'] = {branch}
             else:
                 G.nodes[next_node]['branches'].add(branch)
-            print('\nNew:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+            print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
             edits[last_cell][next_cell] = branch
             for downstream_node in list(G.successors(last_node)):
                 downstream_cell = cellid[nodes.index(downstream_node)]

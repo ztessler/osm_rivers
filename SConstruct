@@ -46,7 +46,7 @@ work = os.path.join('work', delta, STNres)
 output = os.path.join('output', delta, STNres)
 figures = os.path.join('figures', delta, STNres)
 
-STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
+STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{res}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
 OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
