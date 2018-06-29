@@ -37,20 +37,18 @@ def myCommand(target, source, action, **kwargs):
     return env.Command(target=target, source=source, action=action, **kwargs)
 
 GHAASBIN = env['ENV']['GHAASBIN']
-work = 'work'
-output = 'output'
-figures = 'figures'
 
 delta = os.environ.get('DELTA', 'Mekong')
 OSMriver = os.environ.get('OSMriver', 'vietnam')
 STNres = os.environ.get('STNres', '06min')
 
+work = os.path.join('work', delta, STNres)
+output = os.path.join('output', delta, STNres)
+figures = os.path.join('figures', delta, STNres)
+
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
 OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
-
-work = 'work'
-output = 'output'
 
 # project and clip river vectors to delta
 clipped_vec = os.path.join(work, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
@@ -155,14 +153,14 @@ env.Command(
         target=[network, networkdelta],
         action=lib.import_rgis_network)
 
-bifurs = os.path.join(output, delta, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
+bifurs = os.path.join(output, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
 b = env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
         target=bifurs,
         action=lib.simple_bifurcations) # finds where osm river hits a subbasin that isn't on the main basin, and creates a bifurcation there
 env.Default(b)
 
-bifurs = os.path.join(output, delta, '{0}_{1}_bifurcations.csv'.format(delta, STNres))
+bifurs = os.path.join(output, '{0}_{1}_bifurcations.csv'.format(delta, STNres))
 bifurnetwork = os.path.join(work, '{0}_{1}_network_delta_bifur.nx.yaml'.format(delta, STNres))
 b = env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
@@ -172,14 +170,14 @@ env.Default(b)
 
 p = env.Command(
         source=[networkdelta, bifur_grid],
-        target='output/{0}/{0}_{1}_map.png'.format(delta, STNres),
+        target=os.path.join(figures, '{0}_{1}_map.png'.format(delta, STNres)),
         action=[lib.plot_network_map,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 
 p = env.Command(
         source=[bifurnetwork, bifur_grid],
-        target='output/{0}/{0}_{1}_bifur_map.png'.format(delta, STNres),
+        target=os.path.join(figures, '{0}_{1}_bifur_map.png'.format(delta, STNres)),
         action=[lib.plot_network_map,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
