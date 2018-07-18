@@ -64,15 +64,18 @@ def thin_vec(source, target, env):
 
 
 def plot_vec_rivs(source, target, env):
-    rivers = geopandas.read_file(str(source[0]))
-
     mpl.style.use('ggplot')
 
-    fig, ax = plt.subplots(1, 1, figsize=(8,6))
-    rivers.plot(ax=ax)
-    ax.set_aspect('equal')
-    fig.savefig(str(target[0]))
+    rivers = geopandas.read_file(str(source[0]))
 
+    fig, ax = plt.subplots(1, 1, figsize=(8,6))
+    ax.set_facecolor('w')
+    rivers.plot(color='k', ax=ax)
+    ax.set_aspect('equal')
+    ax.xaxis.set_ticks([])
+    ax.yaxis.set_ticks([])
+
+    fig.savefig(str(target[0]))
     return 0
 
 

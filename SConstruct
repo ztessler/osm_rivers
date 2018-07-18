@@ -50,6 +50,8 @@ STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{
 OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
+thumbnail_size = 300
+
 # project and clip river vectors to delta
 clipped_vec = os.path.join(work, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
 proj4str = os.path.join(work, '{}_proj4.txt'.format(delta))
@@ -57,10 +59,17 @@ env.Command(
         source=[OSMrivers, deltashp],
         target=[clipped_vec, proj4str],
         action=lib.project_and_clip_osm_rivers)
-#env.Command(
-        #source=[OSMrivers, deltashp],
-        #target=clipped_vec,
-        #action=lib.clip_osm_rivers)
+p = myCommand(
+        source=clipped_vec,
+        target=os.path.join('figures', delta, '{}_vec_rivs.png'.format(delta)),
+        action=[lib.plot_vec_rivs,
+                'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
+env.Default(p)
+p = myCommand(
+        source=clipped_vec,
+        target=os.path.join('figures', delta, '{}_vec_rivs_full.png'.format(delta)),
+        action=lib.plot_vec_rivs)
+env.Default(p)
 
 thinned_vec = os.path.join(work, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 env.Command(
@@ -68,12 +77,12 @@ env.Command(
         target=thinned_vec,
         action=lib.thin_vec,
         thresh=100)
-
-# plot
-env.Command(
+p = myCommand(
         source=thinned_vec,
-        target=os.path.join(figures, '{}_thinned_rivs.png'.format(delta)),
-        action=lib.plot_vec_rivs)
+        target=os.path.join('figures', delta, '{}_vec_thinned_rivs.png'.format(delta)),
+        action=[lib.plot_vec_rivs,
+                'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
+env.Default(p)
 
 
 # rasterize
@@ -83,6 +92,11 @@ env.Command(
         target=riv_rast,
         action=lib.rasterize_riv,
         imsize=1000)
+p = env.Command(
+        source=riv_rast,
+        target=os.path.join(figures, '{}_riv_rast.0.png').format(delta),
+        action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
 
 # skeletonize raster
 riv_skel = os.path.join(work, '{0}_riv_skeleton.tif'.format(delta))
@@ -92,6 +106,11 @@ env.Command(
         action=lib.skeleton_riv,
         closing=5,
         holethresh=1000)
+p = env.Command(
+        source=riv_skel,
+        target=os.path.join(figures, '{}_riv_skel.1.png').format(delta),
+        action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
 
 # drop small rivers
 riv_dropped_small = os.path.join(work, '{0}_riv_dropped_pieces.tif'.format(delta))
@@ -100,6 +119,11 @@ env.Command(
         target=riv_dropped_small,
         action=lib.keep_n_rivers,
         n=1)
+p = env.Command(
+        source=riv_dropped_small,
+        target=os.path.join(figures, '{}_riv_dropped_small.2.png').format(delta),
+        action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
 
 riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
@@ -107,6 +131,11 @@ myCommand(
         target=riv_clean,
         action=lib.trim_short_rivs,
         minlen=40)
+p = env.Command(
+        source=riv_clean,
+        target=os.path.join(figures, '{}_riv_clean.3.png').format(delta),
+        action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
 
 bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
 env.Command(
