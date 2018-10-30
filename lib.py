@@ -250,7 +250,7 @@ def import_rgis_network(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         cellids = rast.read(1)
         nodata = rast.nodata
-        affine = rast.affine
+        affine = rast.transform
         assert rast.crs['init'] == 'epsg:4326'
     with rasterio.open(str(source[1]), 'r') as rast:
         basins = rast.read(1)
@@ -258,7 +258,7 @@ def import_rgis_network(source, target, env):
         flowdir = rast.read(1)
     with rasterio.open(str(source[3]), 'r') as rast:
         rivers = rast.read(1)
-        affine_riv = rast.affine
+        affine_riv = rast.transform
     with open(str(source[4]), 'r') as fin:
         proj4str = fin.read().strip()
     proj = pyproj.Proj(proj4str)
@@ -362,7 +362,7 @@ def plot_network_map(source, target, env):
     G = nx.read_yaml(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
         bifurs = rast.read(1)
-        affine = rast.affine
+        affine = rast.transform
 
     mpl.style.use('ggplot')
     fig, ax = plt.subplots(1,1, figsize=(8, 12), dpi=300)
@@ -537,7 +537,7 @@ def simple_bifurcations(source, target, env):
     G = nx.read_yaml(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
-        affine = rast.affine
+        affine = rast.transform
     with rasterio.open(str(source[2]), 'r') as rast:
         basins = rast.read(1)
 
@@ -652,7 +652,7 @@ def remap_riv_network(source, target, env):
     Gorig = G.copy()
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
-        affine = rast.affine
+        affine = rast.transform
     with rasterio.open(str(source[2]), 'r') as rast:
         basins = rast.read(1)
 
