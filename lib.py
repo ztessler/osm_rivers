@@ -364,8 +364,13 @@ def plot_network_map(source, target, env):
         bifurs = rast.read(1)
         affine = rast.transform
 
+    # reset upstream counts
+    for node in G.nodes():
+        G.node[node]['upstream'] = len(nx.ancestors(G, node))
+        G.node[node]['downstream'] = len(nx.descendants(G, node))
+
     mpl.style.use('ggplot')
-    fig, ax = plt.subplots(1,1, figsize=(8, 12), dpi=300)
+    fig, ax = plt.subplots(1,1, figsize=(8, 12))#, dpi=300)
 
     pos = {node: G.node[node]['xy'] for node in G.node}
     basin = np.array([G.node[node]['basin'] for node in G.node])
@@ -373,9 +378,10 @@ def plot_network_map(source, target, env):
 
     labels = {node: G.node[node]['cellid'] for node in G.node}
     #labels = {node: node for node in G.node}
-    nx.draw_networkx(G, pos, node_size=(upstream*10), node_color=basin,
-            with_labels=True, labels=labels, font_size=6,
-            arrowsize=8, edge_color='.5',
+    with_labels = False
+    nx.draw_networkx(G, pos, node_size=(upstream*20), node_color=basin,
+            with_labels=with_labels, labels=labels, font_size=6,
+            arrowsize=15, edge_color='.3',
             cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
     for t in ax.texts:
         t.set_clip_on(False)
@@ -390,6 +396,9 @@ def plot_network_map(source, target, env):
     ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
     ax.axis([X.min(), X.max(), Y.min(), Y.max()])
     ax.set_aspect('equal')
+
+    ax.xaxis.set_ticks([])
+    ax.yaxis.set_ticks([])
 
     fig.savefig(str(target[0]))
     return 0
@@ -660,8 +669,8 @@ def remap_riv_network(source, target, env):
     positions = [G.node[node]['xy'] for node in nodes]
     nupstream = [G.node[node]['upstream'] for node in nodes]
     ndownstream = [G.node[node]['downstream'] for node in nodes]
-    nodebasins = [G.node[node]['basin'] for node in G.node]
-    cellid = [G.node[node]['cellid'] for node in G.node]
+    nodebasins = [G.node[node]['basin'] for node in nodes]
+    cellid = [G.node[node]['cellid'] for node in nodes]
 
     p0 = positions[0]
     resolution = np.min([np.sqrt((p0[0]-p[0])**2 + (p0[1]-p[1])**2) for p in positions[1:]])
