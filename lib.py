@@ -45,7 +45,7 @@ def clip_osm_rivers(source, target, env):
     deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'])
     deltahull_ll.crs = delta_ll.crs
 
-    rivers_clip = geopandas.overlay(rivers_ll, deltahull_ll, how='intersection') #slow
+    rivers_clip = geopandas.overlay(rivers_ll, deltahull_ll, how='intersection')
 
     rivers_clip.to_file(str(target[0]))
     return 0
