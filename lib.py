@@ -281,8 +281,9 @@ def import_rgis_network(source, target, env):
 
     G = nx.DiGraph()
     Gclip = nx.DiGraph()
-    for j in range(cellids.shape[0]):
-        for i in range(cellids.shape[1]):
+    nj, ni = cellids.shape
+    for j in range(nj):
+        for i in range(ni):
             if cellids[j,i] != nodata:
                 ll = affine * (i, j)
                 xy = proj(*ll)
@@ -294,7 +295,7 @@ def import_rgis_network(source, target, env):
                     di, dj = neighbors[tocell]
                     i2 = i + di
                     j2 = j + dj
-                    if cellids[j2, i2] != nodata:
+                    if (0<=i2<ni and 0<=j2<nj) and cellids[j2, i2] != nodata:
                         ll2 = affine * (i2, j2)
                         xy2 = proj(*ll2)
                         G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
@@ -378,7 +379,7 @@ def plot_network_map(source, target, env):
 
     labels = {node: G.node[node]['cellid'] for node in G.node}
     #labels = {node: node for node in G.node}
-    with_labels = False
+    with_labels = True # False
     nx.draw_networkx(G, pos, node_size=(upstream*20), node_color=basin,
             with_labels=with_labels, labels=labels, font_size=6,
             arrowsize=15, edge_color='.3',
@@ -728,18 +729,19 @@ def remap_riv_network(source, target, env):
         next_node_i = nodes.index(next_node)
         next_cell = cellid[next_node_i]
 
-        dist = np.sqrt((xy[0]-positions[next_node_i][0])**2 + (xy[1]-positions[next_node_i][1])**2)
         xriv, yriv = xy
         xnode, ynode = positions[next_node_i]
+        dist = np.sqrt((xriv-xnode)**2 + (yriv-ynode)**2)
         # nearness determined by star-shape region around node. half resolution dist ensures all
         # gridlines get captured, but second terms chops out region in middle. makes diagonal
         # connections easier
-        riv_near_node = ((np.sqrt((xnode-xriv)**2 + (ynode-yriv)**2) <= (0.5 * resolution)) and
+        riv_near_node = ((dist <= (0.5 * resolution)) and
                          (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.04))
 
         if ((next_node != last_node) and # moving to new node
             (riv_near_node) and # helps reduce zig-zag
-            (next_node not in nx.ancestors(G, last_node))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node
+            (next_node not in nx.ancestors(G, last_node) or
+                (next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
 
             if 'branches' not in G.nodes[next_node]:
                 G.nodes[next_node]['branches'] = {branch}
@@ -753,6 +755,11 @@ def remap_riv_network(source, target, env):
                     print('Remove:', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
                     G.remove_edge(last_node, downstream_node)
                     edits[last_cell][downstream_cell] = None
+            if last_node in list(G.successors(next_node)):
+                # changing direction, remove link
+                print('Remove:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
+                G.remove_edge(next_node, last_node)
+                edits[next_cell][last_cell] = None
             G.add_edge(last_node, next_node)
 
             # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
