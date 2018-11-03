@@ -38,40 +38,44 @@ def myCommand(target, source, action, **kwargs):
 
 GHAASBIN = env['ENV']['GHAASBIN']
 
+domain = os.environ.get('DOMAIN', 'Mekong')
 delta = os.environ.get('DELTA', 'Mekong')
 OSMriver = os.environ.get('OSMriver', 'vietnam')
 STNres = os.environ.get('STNres', '06min')
 
-work = os.path.join('work', delta, STNres)
-output = os.path.join('output', delta, STNres)
-figures = os.path.join('figures', delta, STNres)
+deltawork = os.path.join('work', delta) # SSEA domain can reuse some single-domain files
+domainwork = os.path.join('work', domain, delta, STNres)
+output = os.path.join('output', domain, STNres)
+deltafigures = os.path.join('figures', delta)
+domainfigures = os.path.join('figures', domain, delta, STNres)
 
-STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{res}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
+STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
+#STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/SSEA/{res}/SSEA_Network_{res}.gdbn'.format(res=STNres)
 OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
 thumbnail_size = 300
 
 # project and clip river vectors to delta
-clipped_vec = os.path.join(work, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
-proj4str = os.path.join(work, '{}_proj4.txt'.format(delta))
+clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
+proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
 env.Command(
         source=[OSMrivers, deltashp],
         target=[clipped_vec, proj4str],
         action=lib.project_and_clip_osm_rivers)
 p = myCommand(
         source=clipped_vec,
-        target=os.path.join('figures', delta, '{}_vec_rivs.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_rivs.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
 env.Default(p)
 p = myCommand(
         source=clipped_vec,
-        target=os.path.join('figures', delta, '{}_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
         action=lib.plot_vec_rivs)
 env.Default(p)
 
-thinned_vec = os.path.join(work, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
+thinned_vec = os.path.join(deltawork, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 env.Command(
         source=clipped_vec,
         target=thinned_vec,
@@ -79,14 +83,14 @@ env.Command(
         thresh=100)
 p = myCommand(
         source=thinned_vec,
-        target=os.path.join('figures', delta, '{}_vec_thinned_rivs.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
 env.Default(p)
 
 
 # rasterize
-riv_rast = os.path.join(work, '{0}_riv_rast.tif'.format(delta))
+riv_rast = os.path.join(deltawork, '{0}_riv_rast.tif'.format(delta))
 env.Command(
         source=thinned_vec,
         target=riv_rast,
@@ -94,12 +98,12 @@ env.Command(
         imsize=1000)
 p = env.Command(
         source=riv_rast,
-        target=os.path.join(figures, '{}_riv_rast.0.png').format(delta),
+        target=os.path.join(deltafigures, '{}_riv_rast.0.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 # skeletonize raster
-riv_skel = os.path.join(work, '{0}_riv_skeleton.tif'.format(delta))
+riv_skel = os.path.join(deltawork, '{0}_riv_skeleton.tif'.format(delta))
 env.Command(
         source=riv_rast,
         target=riv_skel,
@@ -108,12 +112,12 @@ env.Command(
         holethresh=1000)
 p = env.Command(
         source=riv_skel,
-        target=os.path.join(figures, '{}_riv_skel.1.png').format(delta),
+        target=os.path.join(deltafigures, '{}_riv_skel.1.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 # drop small rivers
-riv_dropped_small = os.path.join(work, '{0}_riv_dropped_pieces.tif'.format(delta))
+riv_dropped_small = os.path.join(deltawork, '{0}_riv_dropped_pieces.tif'.format(delta))
 env.Command(
         source=riv_skel,
         target=riv_dropped_small,
@@ -121,11 +125,11 @@ env.Command(
         n=1)
 p = env.Command(
         source=riv_dropped_small,
-        target=os.path.join(figures, '{}_riv_dropped_small.2.png').format(delta),
+        target=os.path.join(deltafigures, '{}_riv_dropped_small.2.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
+riv_clean = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
         source=riv_dropped_small,
         target=riv_clean,
@@ -133,11 +137,11 @@ myCommand(
         minlen=40)
 p = env.Command(
         source=riv_clean,
-        target=os.path.join(figures, '{}_riv_clean.3.png').format(delta),
+        target=os.path.join(deltafigures, '{}_riv_clean.3.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
+bifur_grid = os.path.join(deltawork,'{0}_bifurs.tif'.format(delta))
 env.Command(
         source=riv_clean,
         target=bifur_grid,
@@ -145,16 +149,16 @@ env.Command(
 
 
 # add record id column to network cell table
-network = os.path.join(work, '{0}_{1}_network.gdbn'.format(delta, STNres))
+network = os.path.join(domainwork, '{0}_{1}_network.gdbn'.format(domain, STNres))
 env.Command(
         source=STNnetwork,
         target=network,
         action=os.path.join(GHAASBIN, 'tblAddIdXY') + ' $SOURCE $TARGET')
 
 # import RGIS network
-cellid = os.path.join(work, '{0}_{1}_cellid.{{ext}}'.format(delta, STNres))
-basins = os.path.join(work, '{0}_{1}_basins.{{ext}}'.format(delta, STNres))
-flowdir = os.path.join(work, '{0}_{1}_flowdir.{{ext}}'.format(delta, STNres))
+cellid = os.path.join(domainwork, '{0}_{1}_cellid.{{ext}}'.format(domain, STNres))
+basins = os.path.join(domainwork, '{0}_{1}_basins.{{ext}}'.format(domain, STNres))
+flowdir = os.path.join(domainwork, '{0}_{1}_flowdir.{{ext}}'.format(domain, STNres))
 for (path, varname) in [(cellid, 'CellID'),
                         (basins, 'BasinID'),
                         (flowdir, 'ToCell')]:
@@ -162,7 +166,7 @@ for (path, varname) in [(cellid, 'CellID'),
             source=network,
             target=path.format(ext='nc'),
             action=[
-                os.path.join(GHAASBIN,'netCells2Grid') + ' -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, delta),
+                os.path.join(GHAASBIN,'netCells2Grid') + ' -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, domain),
                 os.path.join(GHAASBIN, 'grdRenameLayers') + ' -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
                 os.path.join(GHAASBIN, 'grdDateLayers') + ' -y 1 -e day ${TARGET}.2 ${TARGET}.3',
                 os.path.join(GHAASBIN, 'rgis2netcdf') + ' ${TARGET}.3 $TARGET'])
@@ -171,8 +175,8 @@ for (path, varname) in [(cellid, 'CellID'),
             target=path.format(ext='tif'),
             action=lib.georef_nc)
 
-network = os.path.join(work, '{0}_{1}_network.nx.yaml'.format(delta, STNres))
-networkdelta = os.path.join(work, '{0}_{1}_network_delta.nx.yaml'.format(delta, STNres))
+network = os.path.join(domainwork, '{0}_{1}_network.nx.yaml'.format(domain, STNres))
+networkdelta = os.path.join(domainwork, '{0}_{1}_{2}_network_delta.nx.yaml'.format(domain, delta, STNres))
 env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
@@ -182,15 +186,15 @@ env.Command(
         target=[network, networkdelta],
         action=lib.import_rgis_network)
 
-bifurs = os.path.join(output, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
-b = env.Command(
-        source=[networkdelta, bifur_grid, basins.format(ext='tif')],
-        target=bifurs,
-        action=lib.simple_bifurcations) # finds where osm river hits a subbasin that isn't on the main basin, and creates a bifurcation there
-env.Default(b)
+#bifurs = os.path.join(output, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
+#b = env.Command(
+        #source=[networkdelta, bifur_grid, basins.format(ext='tif')],
+        #target=bifurs,
+        #action=lib.simple_bifurcations) # finds where osm river hits a subbasin that isn't on the main basin, and creates a bifurcation there
+#env.Default(b)
 
-bifurs = os.path.join(output, '{0}_{1}_bifurcations.csv'.format(delta, STNres))
-bifurnetwork = os.path.join(work, '{0}_{1}_network_delta_bifur.nx.yaml'.format(delta, STNres))
+bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
+bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
 b = env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
         target=[bifurs, bifurnetwork],
@@ -199,14 +203,14 @@ env.Default(b)
 
 p = env.Command(
         source=[networkdelta, bifur_grid],
-        target=os.path.join(figures, '{0}_{1}_map.png'.format(delta, STNres)),
+        target=os.path.join(domainfigures, '{0}_{1}_{2}_map.png'.format(domain, delta, STNres)),
         action=[lib.plot_network_map,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 
 p = env.Command(
         source=[bifurnetwork, bifur_grid],
-        target=os.path.join(figures, '{0}_{1}_bifur_map.png'.format(delta, STNres)),
+        target=os.path.join(domainfigures, '{0}_{1}_{2}_bifur_map.png'.format(domain, delta, STNres)),
         action=[lib.plot_network_map,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
