@@ -201,16 +201,12 @@ b = env.Command(
         action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
 env.Default(b)
 
-p = env.Command(
-        source=[networkdelta, bifur_grid],
-        target=os.path.join(domainfigures, '{0}_{1}_{2}_map.png'.format(domain, delta, STNres)),
-        action=[lib.plot_network_map,
-                'convert -trim $TARGET $TARGET'])
-env.Default(p)
-
-p = env.Command(
-        source=[bifurnetwork, bifur_grid],
-        target=os.path.join(domainfigures, '{0}_{1}_{2}_bifur_map.png'.format(domain, delta, STNres)),
-        action=[lib.plot_network_map,
-                'convert -trim $TARGET $TARGET'])
-env.Default(p)
+for networkversion, network_name in [(networkdelta, ''), (bifurnetwork, 'bifur_')]:
+    for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
+        p = myCommand(
+                source=[networkversion, bifur_grid],
+                target=os.path.join(domainfigures, '{0}_{1}_{2}_{3}map{4}.png'.format(domain, delta, STNres, network_name, label_name)),
+                action=[lib.plot_network_map,
+                        'convert -trim $TARGET $TARGET'],
+                labels=labels)
+        env.Default(p)

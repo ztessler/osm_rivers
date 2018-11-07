@@ -364,6 +364,7 @@ def plot_network_map(source, target, env):
     with rasterio.open(str(source[1]), 'r') as rast:
         bifurs = rast.read(1)
         affine = rast.transform
+    labeltype = env['labels']
 
     # reset upstream counts
     for node in G.nodes():
@@ -377,9 +378,15 @@ def plot_network_map(source, target, env):
     basin = np.array([G.node[node]['basin'] for node in G.node])
     upstream = np.array([np.log(G.node[node]['upstream']+1) for node in G.node])
 
-    labels = {node: G.node[node]['cellid'] for node in G.node}
-    #labels = {node: node for node in G.node}
-    with_labels = True # False
+    if labeltype == 'cells':
+        with_labels = True
+        labels = {node: G.node[node]['cellid'] for node in G.node}
+    elif labeltype == 'nodes':
+        with_labels = True
+        labels = {node: node for node in G.node}
+    elif labeltype == 'none':
+        with_labels = False
+        labels = {}
     nx.draw_networkx(G, pos, node_size=(upstream*20), node_color=basin,
             with_labels=with_labels, labels=labels, font_size=6,
             arrowsize=15, edge_color='.3',
