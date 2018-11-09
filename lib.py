@@ -693,26 +693,104 @@ def remap_riv_network(source, target, env):
     allbasinmask = [1 for b in nodebasins]
 
     nearestnode_to_riv = {}
+    nearestnode_ndownstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
     wet = np.where(rivers>0)
     for j, i in zip(*wet):
         xy = affine * (i,j)
         nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
         nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
+        nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
+
+    # change this to find all "upstream" endponits, and walk downstream from them, marking
+    # flowdirection along route, somehow. Then make sure bifur code only walks downstream.
+    # Probably can turn off cycles-check at that point
+    import ipdb;ipdb.set_trace()
+    endpoints = np.where(rivers==1)
+    endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
+    ndown_mean = np.mean(endpoints_ndown)
+    ndown_std = np.std(endpoints_ndown)
+    ndown_z = (np.array(endpoints_ndown) - ndown_mean) / ndown_std
+    upstream_endpoints = np.where(ndown_z > 1)
+    head_endpoint_i = np.argmax(ndown_z[upstream_endpoints])
+    head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
+    headnode = nearestnode_to_riv[head_rivpt]
+
+    # starting from highest endpoint, walk downstream on riv following branches
+    # find segments as all riv points between branches
+    # calc mean(diff([nearestnode_ndownstream(rivpt) for each riv pt in segment in order from bifur point])
+    # if value is positive, it means the branch is mostly moving upstream. set all riv points from bifur point to end to zero (remove river)
+    (j,i) = head_rivpt
+    cursegi = 0
+    tovisit = [(j,i,cursegi)]
+    visited = set()
+    segments = defaultdict(list)
+    next_rivpt = defaultdict(list) # dictionary keyed on rivpt (j,i) indicating next pt flow-dir-wise (will be multiple pts at bifur
+    maxsegi = cursegi
+    while tovisit:
+        j, i, cursegi = tovisit.pop()
+        segments[cursegi].append((j,i))
+        if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
+            #if cursegi not in segments: # at start of segment
+                #cursegi += 1
+                #segments[cursegi] = [(j,i)]
+            if len(segments[cursegi]) > 1: # at end of segment
+                segpts = segments[cursegi]
+                dir_metric = np.mean(np.diff([nearestnode_ndownstream[pt] for pt in segpts]))
+                #if dir_metric > 0: # segment goes upstream! delete
+                    #for pt in segpts:
+                        #p0,p1 = pt
+                        #if rivers[p0, p1] == 3:
+                            #rivers[p0,p1] = 2
+                        #elif rivers[p0,p1] in [1, 2]:
+                            #rivers[p0,p1] = 0
+                # mark next riv pts
+                if dir_metric <= 0: # downstream
+                    print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
+                    for thisji, nextji in zip(segpts[:-1], segpts[1:]):
+                        next_rivpt[thisji].append(nextji)
+                else: # upstream
+                    print(cursegi, segpts[0], segpts[-1], dir_metric, 'upstream')
+                    for thisji, nextji in zip(segpts[1:], segpts[:-1]):
+                        next_rivpt[thisji].append(nextji)
+
+        #else: # at start or still on segment
+            #segments[cursegi].append((j,i))
+
+        visited.add((j,i))
+        #for dj in [-1,0,1]:
+            #for di in [-1,0,1]:
+        for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
+                if dj == di == 0:
+                    continue
+                j2 = j + dj
+                i2 = i + di
+                if rivers[j2,i2]>0 and (j2, i2) not in visited:
+                    if rivers[j,i] == 3: # bifur point
+                        maxsegi += 1 # each branch gets new cursegi
+                        cursegi = maxsegi
+                        segments[cursegi].append((j,i)) # add bifur point to new segment
+                    tovisit.append((j2, i2, cursegi))
+                    if rivers[j,i] == 2:
+                        # regular path, not bifur, only one neighbor. break so as not to find incorrect diag branch
+                        break
+# by here, next_rivpt gives us flowdirection
+
+
 
     # find upstream most river point
-    endpoints = np.where(rivers==1)
-    maxdownstream = -np.inf
-    headnode_i = None
-    head_endpoint_i = None
-    for ii, (j, i) in enumerate(zip(*endpoints)):
-        xy = affine * (i,j)
-        largest_near_node_i = _find_largest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
-        if largest_near_node_i is not None:
-            if ndownstream[largest_near_node_i] > maxdownstream:
-                maxdownstream = ndownstream[largest_near_node_i]
-                headnode_i = largest_near_node_i
-                head_endpoint_i = ii
-    headnode = nodes[headnode_i]
+    #endpoints = np.where(rivers==1)
+    #maxdownstream = -np.inf
+    #headnode_i = None
+    #head_endpoint_i = None
+    #for ii, (j, i) in enumerate(zip(*endpoints)):
+        #xy = affine * (i,j)
+        #largest_near_node_i = _find_largest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
+        #if largest_near_node_i is not None:
+            #if ndownstream[largest_near_node_i] > maxdownstream:
+                #maxdownstream = ndownstream[largest_near_node_i]
+                #headnode_i = largest_near_node_i
+                #head_endpoint_i = ii
+    #headnode = nodes[headnode_i]
 
     initial_branch = 'a'
     next_branch = 'b'
@@ -726,6 +804,8 @@ def remap_riv_network(source, target, env):
     visited = set()
     to_visit = [(initial_riv_pt, initial_node_i, initial_branch)]
     while to_visit:
+        ### TODO last node on river should have no downstream links
+        ### see 06min bifur map, mekong, cell 7438 (blue)
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
         last_node = nodes[last_node_i]
@@ -746,9 +826,10 @@ def remap_riv_network(source, target, env):
                          (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.04))
 
         if ((next_node != last_node) and # moving to new node
-            (riv_near_node) and # helps reduce zig-zag
-            (next_node not in nx.ancestors(G, last_node) or
-                (next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
+            (riv_near_node) ):# and # helps reduce zig-zag
+            #(next_node not in nx.ancestors(G, last_node) or
+                #(next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
+                # dont worry about cycles, since output from this node will be rerouted also, breaking cycle
 
             if 'branches' not in G.nodes[next_node]:
                 G.nodes[next_node]['branches'] = {branch}
