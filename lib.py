@@ -704,7 +704,6 @@ def remap_riv_network(source, target, env):
     # change this to find all "upstream" endponits, and walk downstream from them, marking
     # flowdirection along route, somehow. Then make sure bifur code only walks downstream.
     # Probably can turn off cycles-check at that point
-    import ipdb;ipdb.set_trace()
     endpoints = np.where(rivers==1)
     endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
     ndown_mean = np.mean(endpoints_ndown)
@@ -735,7 +734,9 @@ def remap_riv_network(source, target, env):
                 #segments[cursegi] = [(j,i)]
             if len(segments[cursegi]) > 1: # at end of segment
                 segpts = segments[cursegi]
-                dir_metric = np.mean(np.diff([nearestnode_ndownstream[pt] for pt in segpts]))
+                ndowns = [nearestnode_ndownstream[pt] for pt in segpts]
+                n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
+                dir_metric = np.mean(np.diff(ndowns))
                 #if dir_metric > 0: # segment goes upstream! delete
                     #for pt in segpts:
                         #p0,p1 = pt
@@ -744,7 +745,7 @@ def remap_riv_network(source, target, env):
                         #elif rivers[p0,p1] in [1, 2]:
                             #rivers[p0,p1] = 0
                 # mark next riv pts
-                if dir_metric <= 0: # downstream
+                if (dir_metric <= 0) or (n_nodes_on_seg <= 1): # downstream, and dont set very short segs to upstream
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
                     for thisji, nextji in zip(segpts[:-1], segpts[1:]):
                         next_rivpt[thisji].append(nextji)
@@ -792,17 +793,25 @@ def remap_riv_network(source, target, env):
                 #head_endpoint_i = ii
     #headnode = nodes[headnode_i]
 
-    initial_branch = 'a'
+    branch = 'a'
     next_branch = 'b'
-    initial_riv_pt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
-    initial_node = nearestnode_to_riv[initial_riv_pt]
-    initial_node_i = nodes.index(initial_node)
-    G.nodes[initial_node]['branches'] = {initial_branch}
+    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
+    #initial_nodes = [nearestnode_to_riv[riv_pt] for riv_pt in initial_riv_pts]
+    #initial_node_i = [nodes.index(node) for node in initial_nodes]
+    to_visit = []
+    for riv_pt in initial_riv_pts:
+        node = nearestnode_to_riv[riv_pt]
+        node_i = nodes.index(node)
+        G.nodes[node]['branches'] = {branch}
+        to_visit.append((riv_pt, node_i, branch))
+        branch = next_branch
+        next_branch = chr(ord(next_branch)+1)
 
+    #import ipdb;ipdb.set_trace()
     # walk down river
     edits = defaultdict(dict)
-    visited = set()
-    to_visit = [(initial_riv_pt, initial_node_i, initial_branch)]
+    #visited = set()
+    #to_visit = [(initial_riv_pt, initial_node_i, branch)]
     while to_visit:
         ### TODO last node on river should have no downstream links
         ### see 06min bifur map, mekong, cell 7438 (blue)
@@ -875,17 +884,27 @@ def remap_riv_network(source, target, env):
             next_node_i = last_node_i
             next_cell = last_cell
 
-        second_branch = False
-        for dj in [-1,0,1]:
-            for di in [-1,0,1]:
-                rivj2 = rivj + dj
-                rivi2 = rivi + di
-                if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
-                    if second_branch:
-                        branch += next_branch
-                        next_branch = chr(ord(next_branch)+1)
-                    to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
-                    second_branch = True
+        #second_branch = False
+        #for dj in [-1,0,1]:
+            #for di in [-1,0,1]:
+                #rivj2 = rivj + dj
+                #rivi2 = rivi + di
+                #if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
+        for branch_i, (rivj2,rivi2) in enumerate(next_rivpt[rivj,rivi]):
+            if branch_i > 0: # keep same branch name on first bifur side, add letter on other side
+                branch += next_branch
+                next_branch = chr(ord(next_branch)+1)
+            to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
+            #second_branch = True
+        if len(next_rivpt[rivj,rivi]) == 0:
+            # no downstream points, remove downstream flow from node
+            # next_node is next if we just moved to new one, or last_node if we didn't
+            for node2 in list(G.successors(next_node)):
+                G.remove_edge(next_node, node2)
+                node2_cell = cellid[nodes.index(node2)]
+                edits[next_cell][node2_cell] = None
+                # write outlet cellid to file for later use??
+
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
