@@ -832,7 +832,7 @@ def remap_riv_network(source, target, env):
         # gridlines get captured, but second terms chops out region in middle. makes diagonal
         # connections easier
         riv_near_node = ((dist <= (0.5 * resolution)) and
-                         (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.04))
+                         (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.02))
 
         if ((next_node != last_node) and # moving to new node
             (riv_near_node) ):# and # helps reduce zig-zag
