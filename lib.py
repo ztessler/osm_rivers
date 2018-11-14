@@ -810,7 +810,7 @@ def remap_riv_network(source, target, env):
     #import ipdb;ipdb.set_trace()
     # walk down river
     edits = defaultdict(dict)
-    #visited = set()
+    visited = set()
     #to_visit = [(initial_riv_pt, initial_node_i, branch)]
     while to_visit:
         ### TODO last node on river should have no downstream links
@@ -819,7 +819,7 @@ def remap_riv_network(source, target, env):
         xy = affine * (rivi,rivj)
         last_node = nodes[last_node_i]
         last_cell = cellid[last_node_i]
-        visited.add((rivj, rivi))
+        visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
 
         next_node = nearestnode_to_riv[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
@@ -891,11 +891,13 @@ def remap_riv_network(source, target, env):
                 #rivi2 = rivi + di
                 #if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
         for branch_i, (rivj2,rivi2) in enumerate(next_rivpt[rivj,rivi]):
-            if branch_i > 0: # keep same branch name on first bifur side, add letter on other side
-                branch += next_branch
-                next_branch = chr(ord(next_branch)+1)
-            to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
-            #second_branch = True
+            if ((rivj2, rivi2), last_node_i) not in visited: # when river converges, only keep first branch that gets there
+                # no, keep both, could loose a convergence here if last node on one branch is too far away to jump before the branch is dropped
+                if branch_i > 0: # keep same branch name on first bifur side, add letter on other side
+                    branch += next_branch
+                    next_branch = chr(ord(next_branch)+1)
+                to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
+                #second_branch = True
         if len(next_rivpt[rivj,rivi]) == 0:
             # no downstream points, remove downstream flow from node
             # next_node is next if we just moved to new one, or last_node if we didn't
