@@ -827,15 +827,30 @@ def remap_riv_network(source, target, env):
 
         xriv, yriv = xy
         xnode, ynode = positions[next_node_i]
-        dist = np.sqrt((xriv-xnode)**2 + (yriv-ynode)**2)
+        xp = xriv - xnode
+        yp = yriv - ynode
+        dist = np.sqrt(xp**2 + yp**2)
+        halfres = .5 * resolution
+        widehalfres = .6 * resolution
         # nearness determined by star-shape region around node. half resolution dist ensures all
         # gridlines get captured, but second terms chops out region in middle. makes diagonal
         # connections easier
-        riv_near_node = ((dist <= (0.5 * resolution)) and
-                         (np.abs((xnode-xriv)/resolution * (ynode-yriv)/resolution) <= 0.02))
+        #riv_near_node = ((dist <= halfres) and
+                         #(np.abs(xp/resolution * yp/resolution) <= 0.02))
+        # or use a diamond shape, slighlty expand halfres to widen target at corners (but clip to halfres dist)
+        #riv_near_node = ((dist <= halfres) and
+                         #(yp + xp < widehalfres) and (yp - xp > -widehalfres) and
+                         #(yp + xp > -widehalfres) and (yp - xp < widehalfres))
+        # or a star with straight edges, gathers a bit more of the center than first star method
+        riv_near_node = ((dist <= halfres) and
+                         ((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
+                         ((yp - 2*xp > -widehalfres) or (yp - xp/2 > -widehalfres/2)) and
+                         ((yp + 2*xp > -widehalfres) or (yp + xp/2 > -widehalfres/2)) and
+                         ((yp - 2*xp <  widehalfres) or (yp - xp/2 <  widehalfres/2)))
+
 
         if ((next_node != last_node) and # moving to new node
-            (riv_near_node) ):# and # helps reduce zig-zag
+            (riv_near_node)): # and # helps reduce zig-zag
             #(next_node not in nx.ancestors(G, last_node) or
                 #(next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
                 # dont worry about cycles, since output from this node will be rerouted also, breaking cycle
