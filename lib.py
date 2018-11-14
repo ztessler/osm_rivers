@@ -412,120 +412,6 @@ def plot_network_map(source, target, env):
     return 0
 
 
-#def simple_bifurcations_OLD(source, target, env):
-    #G = nx.read_yaml(str(source[0]))
-    #with rasterio.open(str(source[1]), 'r') as rast:
-        #rivers = rast.read(1)
-        #affine = rast.affine
-    #with rasterio.open(str(source[2]), 'r') as rast:
-        #basins = rast.read(1)
-
-    #nodes = [node for node in G.nodes()]
-    #positions = [G.node[node]['xy'] for node in nodes]
-
-    #minx, maxy = affine * (0,0)
-    #maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
-
-    ## remove network nodes outside delta domain
-    ##for n, (px, py) in list(zip(nodes, positions)):
-        ##if not ((minx < px < maxx) and (miny < py < maxy)):
-            ##nodes.remove(n)
-            ##positions.remove((px,py))
-
-    ## loop over river pixels, find nearest node
-    #wet = np.where(rivers>0)
-    #nearestnode = {}
-    #for j,i in zip(*wet):
-        #x, y = affine * (i,j)
-        #mindist = np.inf
-        #for idx, (px, py) in enumerate(positions):
-            #dist = np.sqrt((px-x)**2 + (py-y)**2)
-            #if dist < mindist:
-                #mindist = dist
-                #minidx = idx
-        #nearestnode[(j,i)] = nodes[minidx] #(px,py)
-
-    #nearestriv = {}
-    #for idx, (px, py) in enumerate(positions):
-        #mindist = np.inf
-        #for j,i in zip(*wet):
-            #x, y = affine * (i,j)
-            #dist = np.sqrt((px-x)**2 + (py-y)**2)
-            #if dist < mindist:
-                #mindist = dist
-                #minji = (j,i)
-        #nearestriv[nodes[idx]] = minji
-
-    #nodesonriv = set(nearestnodes.values())
-
-## TODO - walk river from top to bottom, find where river meets new basin. bifurcate there!
-## also TODO - check in WBM/MFlib for cycles? pretty sure a cycle would mess the sorting up since the recursive travel calc would never complete. maybe check if 100% of the flow is diverted, and if so delete the original downlink? Just avoid cycles here for now.
-
-    ## find node on river with largest "upstream"
-    #maxnupstream = -np.inf
-    ##for node in nodes:
-    #for node in nearestnode.values():
-        ##if node in nearestriv:
-        #nupcells = G.node[node]['upstream']
-        #if nupcells > maxnupstream:
-            #maxnupstream = nupcells
-            #maxnupnode = node
-    #curnode = maxnupnode
-    ## curnode should now be downstream-most node on OSM river
-
-    ##import ipdb;ipdb.set_trace() # TODO code here can diverge from OSM river
-    ## TODO: also an issue where nearest node isn't actually on the mainstem, and a close but larger node should be considered as "nearest". need some scoring function to asses how far away is still ok.
-    #while True:
-        #maxnupstream = -np.inf
-        #for upcell in G.predecessors(curnode):
-            #upcellupstream = G.nodes[upcell]['upstream']
-            #if (ipcellupstream in upcellupstream) > maxnupstream:
-                #maxnupstream = upcellupstream
-                #nextnode = upcell
-        #if maxnupstream == -np.inf:
-            #break
-        #curnode = nextnode
-    ## curnode should now be upstream-most node on OSM river.
-    #topnode = curnode
-
-    #(j,i) = nearestriv[topnode] # ASSUME THIS IS ON MAIN BASIN. other way?
-    #mainbasin = basins[j,i] # ASSUMING THIS IS MAIN BASIN
-
-    #offbasin = []
-    #for (j,i) in zip(*wet):
-        #if basins[j,i] != mainbasin:
-            #offbasin.append((j,i))
-
-    ## nodes for those river pixels not on main basin
-    #offnodes = [(nearestnode[(j,i)], basins[j,i]) for (j,i) in offbasin]
-
-    #otherbasins = {n[1] for n in offnodes}
-    #for otherbasin in otherbasins:
-        #othernodes = [offnode[0] for offnode in offbasin if offnode[1] == otherbasin]
-        #maxndown = -np.inf
-        #for othernode in othernodes:
-            #ndown = G.nodes[othernode]['downstream']
-            #if ndown > maxndown:
-                #maxndown = ndown
-                #topbasinnode = othernode
-        ## find nearest source node. start at top
-        #curnode = topnode
-        #mindist = np.inf
-        #while True:
-            #curnode = G.descendants(curnode)[0]
-            #topbasinxy = G.nodes[topbasinnode]['xy']
-            #curnodexy = G.nodes[curnode]['xy']
-            #dist = np.sqrt((topbasinxy[0] - curnodexy[0])**2 + (topbasinxy[1] - curnodexy[1])**2)
-            #if dist < mindist:
-                #mindist = dist
-                #nearestmainstemnode = curnode
-        #print("Fill basin", otherbasin, ": divert from", nearestmainstemnode, "to", topbasinnode)
-        #with open(str(target[0]), 'a') as fout:
-            #fout.write('{0}, {1}, 0.5\n'.format(G.nodes[nearestmainstemnode]['cellid']+1, G.nodes[topbasinnode]['cellid']+1))
-
-    #return 0
-
-
 def _find_largest_node_i(rivxy, positions, nupstream, nodemask, resolution, searchradius):
     rivx, rivy = rivxy
     dists = [np.sqrt((rivx - nodex)**2 + (rivy - nodey)**2) for (nodex, nodey) in positions]
@@ -701,9 +587,6 @@ def remap_riv_network(source, target, env):
         nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
         nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
 
-    # change this to find all "upstream" endponits, and walk downstream from them, marking
-    # flowdirection along route, somehow. Then make sure bifur code only walks downstream.
-    # Probably can turn off cycles-check at that point
     endpoints = np.where(rivers==1)
     endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
     ndown_mean = np.mean(endpoints_ndown)
@@ -729,21 +612,11 @@ def remap_riv_network(source, target, env):
         j, i, cursegi = tovisit.pop()
         segments[cursegi].append((j,i))
         if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
-            #if cursegi not in segments: # at start of segment
-                #cursegi += 1
-                #segments[cursegi] = [(j,i)]
             if len(segments[cursegi]) > 1: # at end of segment
                 segpts = segments[cursegi]
                 ndowns = [nearestnode_ndownstream[pt] for pt in segpts]
                 n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
                 dir_metric = np.mean(np.diff(ndowns))
-                #if dir_metric > 0: # segment goes upstream! delete
-                    #for pt in segpts:
-                        #p0,p1 = pt
-                        #if rivers[p0, p1] == 3:
-                            #rivers[p0,p1] = 2
-                        #elif rivers[p0,p1] in [1, 2]:
-                            #rivers[p0,p1] = 0
                 # mark next riv pts
                 if (dir_metric <= 0) or (n_nodes_on_seg <= 1): # downstream, and dont set very short segs to upstream
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
@@ -754,12 +627,7 @@ def remap_riv_network(source, target, env):
                     for thisji, nextji in zip(segpts[1:], segpts[:-1]):
                         next_rivpt[thisji].append(nextji)
 
-        #else: # at start or still on segment
-            #segments[cursegi].append((j,i))
-
         visited.add((j,i))
-        #for dj in [-1,0,1]:
-            #for di in [-1,0,1]:
         for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
                 if dj == di == 0:
                     continue
@@ -776,28 +644,9 @@ def remap_riv_network(source, target, env):
                         break
 # by here, next_rivpt gives us flowdirection
 
-
-
-    # find upstream most river point
-    #endpoints = np.where(rivers==1)
-    #maxdownstream = -np.inf
-    #headnode_i = None
-    #head_endpoint_i = None
-    #for ii, (j, i) in enumerate(zip(*endpoints)):
-        #xy = affine * (i,j)
-        #largest_near_node_i = _find_largest_node_i(xy, positions, nupstream, mainbasinmask, resolution, 2)
-        #if largest_near_node_i is not None:
-            #if ndownstream[largest_near_node_i] > maxdownstream:
-                #maxdownstream = ndownstream[largest_near_node_i]
-                #headnode_i = largest_near_node_i
-                #head_endpoint_i = ii
-    #headnode = nodes[headnode_i]
-
     branch = 'a'
     next_branch = 'b'
     initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
-    #initial_nodes = [nearestnode_to_riv[riv_pt] for riv_pt in initial_riv_pts]
-    #initial_node_i = [nodes.index(node) for node in initial_nodes]
     to_visit = []
     for riv_pt in initial_riv_pts:
         node = nearestnode_to_riv[riv_pt]
@@ -807,14 +656,10 @@ def remap_riv_network(source, target, env):
         branch = next_branch
         next_branch = chr(ord(next_branch)+1)
 
-    #import ipdb;ipdb.set_trace()
     # walk down river
     edits = defaultdict(dict)
     visited = set()
-    #to_visit = [(initial_riv_pt, initial_node_i, branch)]
     while to_visit:
-        ### TODO last node on river should have no downstream links
-        ### see 06min bifur map, mekong, cell 7438 (blue)
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
         last_node = nodes[last_node_i]
@@ -848,13 +693,8 @@ def remap_riv_network(source, target, env):
                          ((yp + 2*xp > -widehalfres) or (yp + xp/2 > -widehalfres/2)) and
                          ((yp - 2*xp <  widehalfres) or (yp - xp/2 <  widehalfres/2)))
 
-
         if ((next_node != last_node) and # moving to new node
-            (riv_near_node)): # and # helps reduce zig-zag
-            #(next_node not in nx.ancestors(G, last_node) or
-                #(next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
-                # dont worry about cycles, since output from this node will be rerouted also, breaking cycle
-
+                (riv_near_node)):        # helps reduce zig-zag
             if ((next_cell in edits) and
                    (last_cell in edits[next_cell]) and
                    (edits[next_cell][last_cell] is not None)):
@@ -914,20 +754,13 @@ def remap_riv_network(source, target, env):
             next_node_i = last_node_i
             next_cell = last_cell
 
-        #second_branch = False
-        #for dj in [-1,0,1]:
-            #for di in [-1,0,1]:
-                #rivj2 = rivj + dj
-                #rivi2 = rivi + di
-                #if rivers[rivj2,rivi2]>0 and (rivj2, rivi2) not in visited:
         for branch_i, (rivj2,rivi2) in enumerate(next_rivpt[rivj,rivi]):
-            if ((rivj2, rivi2), last_node_i) not in visited: # when river converges, only keep first branch that gets there
-                # no, keep both, could loose a convergence here if last node on one branch is too far away to jump before the branch is dropped
+            if ((rivj2, rivi2), last_node_i) not in visited:
+                # when rivers converg, keep both branches, could loose a convergence here if last node on one branch is too far away to jump before the branch is dropped
                 if branch_i > 0: # keep same branch name on first bifur side, add letter on other side
                     branch += next_branch
                     next_branch = chr(ord(next_branch)+1)
                 to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
-                #second_branch = True
         if len(next_rivpt[rivj,rivi]) == 0:
             # no downstream points, remove downstream flow from node
             # next_node is next if we just moved to new one, or last_node if we didn't
@@ -936,7 +769,6 @@ def remap_riv_network(source, target, env):
                 node2_cell = cellid[nodes.index(node2)]
                 edits[next_cell][node2_cell] = None
                 # write outlet cellid to file for later use??
-
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
