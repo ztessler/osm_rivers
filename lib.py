@@ -840,46 +840,61 @@ def remap_riv_network(source, target, env):
                 #(next_node in G.predecessors(last_node)))): # and new node isn't actually upstream of last_node, dont want to introduce cycles. just skip, goes to next downstream node. BUT if it is an ancestor, disregard if its immediately upstream since we're going to disconnect that right now. this is needed to change direction of small branches
                 # dont worry about cycles, since output from this node will be rerouted also, breaking cycle
 
-            if 'branches' not in G.nodes[next_node]:
-                G.nodes[next_node]['branches'] = {branch}
-            else:
-                G.nodes[next_node]['branches'].add(branch)
-            print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
-            edits[last_cell][next_cell] = branch
-            for downstream_node in list(G.successors(last_node)):
-                downstream_cell = cellid[nodes.index(downstream_node)]
-                if (downstream_cell not in edits[last_cell]):
-                    print('Remove:', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
-                    G.remove_edge(last_node, downstream_node)
-                    edits[last_cell][downstream_cell] = None
-            if last_node in list(G.successors(next_node)):
-                # changing direction, remove link
-                print('Remove:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
+            if ((next_cell in edits) and
+                   (last_cell in edits[next_cell]) and
+                   (edits[next_cell][last_cell] is not None)):
+                # if water already rerouted from next_cell to last_cell, undo that and dont add new edit
+                # fixes issue where meandering river goes back and forth between two nodes and second
+                # rerouting overwrites the first. remove both to leave water where it was.
+                print('Undo:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                 G.remove_edge(next_node, last_node)
-                edits[next_cell][last_cell] = None
-            G.add_edge(last_node, next_node)
+                G.nodes[last_node]['branches'].discard(branch)
+                del edits[next_cell][last_cell]
+            else:
+                # regular re-routing
+                # create a new link
+                if 'branches' not in G.nodes[next_node]:
+                    G.nodes[next_node]['branches'] = {branch}
+                else:
+                    G.nodes[next_node]['branches'].add(branch)
+                print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+                edits[last_cell][next_cell] = True
+                for downstream_node in list(G.successors(last_node)):
+                    # remove existing downstream links
+                    downstream_cell = cellid[nodes.index(downstream_node)]
+                    if (downstream_cell not in edits[last_cell]):
+                        print('Remove:', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
+                        G.remove_edge(last_node, downstream_node)
+                        edits[last_cell][downstream_cell] = None
+                if last_node in list(G.successors(next_node)):
+                    # if changing direction, remove previous wrong-direction link
+                    print('Remove:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
+                    G.remove_edge(next_node, last_node)
+                    edits[next_cell][last_cell] = None
+                G.add_edge(last_node, next_node)
 
-            # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
-            if ((abs(last_node[0]-next_node[0]) == 1) and
-                (abs(last_node[1]-next_node[1]) == 1)):
-                corner1_node = (next_node[0], last_node[1])
-                corner2_node = (last_node[0], next_node[1])
-                corner1_cell = cellid[nodes.index(corner1_node)]
-                corner2_cell = cellid[nodes.index(corner2_node)]
-                if (corner1_node in G.succ[corner2_node]):
-                    G.remove_edge(corner2_node, corner1_node)
-                    edits[corner2_cell][corner1_cell] = None
-                    G.add_edge(corner2_node, next_node)
-                    edits[corner2_cell][next_cell] = 'XXX' # anything other than None
-                if (corner2_node in G.succ[corner1_node]):
-                    G.remove_edge(corner1_node, corner2_node)
-                    edits[corner1_cell][corner2_cell] = None
-                    G.add_edge(corner1_node, next_node)
-                    edits[corner1_cell][next_cell] = 'XXX' # anything other than None
+                # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
+                if ((abs(last_node[0]-next_node[0]) == 1) and
+                    (abs(last_node[1]-next_node[1]) == 1)):
+                    corner1_node = (next_node[0], last_node[1])
+                    corner2_node = (last_node[0], next_node[1])
+                    corner1_cell = cellid[nodes.index(corner1_node)]
+                    corner2_cell = cellid[nodes.index(corner2_node)]
+                    if (corner1_node in G.succ[corner2_node]):
+                        G.remove_edge(corner2_node, corner1_node)
+                        edits[corner2_cell][corner1_cell] = None
+                        G.add_edge(corner2_node, next_node)
+                        edits[corner2_cell][next_cell] = True # anything other than None
+                    if (corner2_node in G.succ[corner1_node]):
+                        G.remove_edge(corner1_node, corner2_node)
+                        edits[corner1_cell][corner2_cell] = None
+                        G.add_edge(corner1_node, next_node)
+                        edits[corner1_cell][next_cell] = True # anything other than None
 
-        elif ((not riv_near_node) or
-              (next_node in nx.ancestors(G, last_node))):
-            # dont step to next node, skip it by waiting until a different node is closest to river
+        elif (not riv_near_node): #or
+              #(next_node in nx.ancestors(G, last_node))):
+            # not stepping to next node, skip it by waiting until a different node is closest to river
+            # next visited rivpt will still be attached to last_node
             next_node = last_node
             next_node_i = last_node_i
             next_cell = last_cell
