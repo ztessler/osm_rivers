@@ -659,6 +659,7 @@ def remap_riv_network(source, target, env):
     # walk down river
     edits = defaultdict(dict)
     visited = set()
+    outlets = set()
     while to_visit:
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
@@ -764,11 +765,11 @@ def remap_riv_network(source, target, env):
         if len(next_rivpt[rivj,rivi]) == 0:
             # no downstream points, remove downstream flow from node
             # next_node is next if we just moved to new one, or last_node if we didn't
+            outlets.add(next_cell)
             for node2 in list(G.successors(next_node)):
                 G.remove_edge(next_node, node2)
                 node2_cell = cellid[nodes.index(node2)]
                 edits[next_cell][node2_cell] = None
-                # write outlet cellid to file for later use??
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
@@ -794,5 +795,9 @@ def remap_riv_network(source, target, env):
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
         G.node[node]['downstream'] = len(nx.descendants(G, node))
     nx.write_yaml(G, str(target[1]))
+
+    with open(str(target[2]), 'w') as fout:
+        for outlet in sorted(outlets):
+            fout.write(str(outlet)+'\n')
 
     return 0

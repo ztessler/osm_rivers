@@ -195,9 +195,10 @@ env.Command(
 
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
+bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
 b = env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
-        target=[bifurs, bifurnetwork],
+        target=[bifurs, bifurnetwork, bifuroutlets],
         action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
 env.Default(b)
 
