@@ -389,7 +389,7 @@ def plot_network_map(source, target, env):
         labels = {}
     nx.draw_networkx(G, pos, node_size=(upstream*20), node_color=basin,
             with_labels=with_labels, labels=labels, font_size=6,
-            arrowsize=15, edge_color='.3',
+            arrowsize=10, edge_color='.3', alpha=.8,
             cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
     for t in ax.texts:
         t.set_clip_on(False)
