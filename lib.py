@@ -551,6 +551,98 @@ def simple_bifurcations(source, target, env):
 
 
 def remap_riv_network(source, target, env):
+    import skimage.draw
+
+    def _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine):
+
+        def _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv):
+            # erase river above rivpt, and adjust next_rivpt and prev_rivpt dicts
+            thispt = rivpt
+            rivers[thispt] = 1
+            initial_riv_pts.append(thispt)
+            to_visit = [(thispt, uppt) for uppt in prev_rivpt[thispt]]
+            while to_visit:
+            #while thispt in prev_rivpt:
+                downpt, thispt = to_visit.pop()
+                #downpt = thispt
+                #thispt = prev_rivpt[downpt]
+                rivers[thispt] = 0
+                try:
+                    del prev_rivpt[downpt]
+                except KeyError: # could have already been deleted if on branch upstream of a convergence
+                    pass
+                del next_rivpt[thispt]
+                del nearestnode_to_riv[thispt]
+                if thispt in initial_riv_pts:
+                    initial_riv_pts.remove(thispt)
+                if thispt in prev_rivpt:
+                    to_visit.extend([(thispt, uppt) for uppt in prev_rivpt[thispt]])
+            return rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv
+
+        def _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions):
+            # draw new river in straight line from closest river approach to head_node
+            head_node_ji = head_node_ij[::-1]
+            rowidx, colidx = skimage.draw.line(*mindist_rivpt, *head_node_ji)
+            if (rowidx[-1] == mindist_rivpt[0]) and (colidx[-1] == mindist_rivpt[0]):
+                # reverse so we walk through from rivpt toward node (upstream)
+                rowidx = rowidx[::-1]
+                colidx = colidx[::-1]
+            rivers[rowidx, colidx] = 2
+            rivers[head_node_ji] = 1
+            downj = None; downi = None
+            for j, i in zip(rowidx, colidx):
+                # walk new line, setup prev, next, and nearest dicts
+                if (downj is not None) and (previ is not None):
+                    prev_rivpt[downj,downi].append((j, i))
+                    next_rivt[j, i].append((downj, downi))
+                    xy = affine * (j, i)
+                    allbasinmask = [1 for pos in positions]
+                    nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
+                    nearestnode_to_riv[j, i] = nodes[nearest_node_i]
+                downj = j
+                downi = i
+            initial_riv_pts.remove(mindist_rivpt)
+            initial_riv_pts.append(head_node_ji)
+            return rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv
+
+        score = np.array(nupstream) * np.array(ndownstream) # maximized at "center" of mainstem, which we assume is upstream of the delta boundary
+        head_node_i = np.argmax(score)
+        head_node = nodes[head_node_i]
+        nearest = nearestnode_to_riv[head_rivpt]
+
+        if head_node == nearest:
+            return rivers, head_rivpt, initial_riv_pts, largest, next_rivpt, prev_rivpt, nearestnode_to_riv
+
+        found_head_node_on_riv = False
+        for rivpt, node in nearestnode_to_riv.items():
+            if node == head_node:
+                found_head_node_on_riv = True
+                break
+        if found_head_node_on_riv:
+            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
+            return rivers, rivpt, initial_riv_pts, node, next_rivpt, prev_rivpt, nearestnode_to_riv
+        else:
+            to_visit = initial_riv_pts
+            head_node_x, head_node_y = positions[head_node_i]
+            head_node_ij = ~affine * (head_node_x, head_node_y)
+            mindist = np.inf
+            while to_visit:
+                rivpt = to_visit.pop()
+                rivj, rivi = rivpt
+                rivx, rivy = affine * (rivi,rivj)
+                dist = np.sqrt((head_node_x - rivx)**2 + (head_nody_y - rivy)**2)
+                if dist < mindist:
+                    mindist = dist
+                    mindist_rivpt = rivpt
+                to_visit.extend(next_rivpt[rivpt])
+            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, mindist_rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
+            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions)
+
+            raise NotImplementedError('Redrawing osm river path to connect with upstream mainstem. Code SHOULD be correct, but hasnt been tested on a real network')
+
+            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt
+
+
     G = nx.read_yaml(str(source[0]))
     Gorig = G.copy()
     with rasterio.open(str(source[1]), 'r') as rast:
@@ -595,8 +687,8 @@ def remap_riv_network(source, target, env):
     upstream_endpoints = np.where(ndown_z > 1)
     head_endpoint_i = np.argmax(ndown_z[upstream_endpoints])
     head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
-    headnode = nearestnode_to_riv[head_rivpt]
 
+    # Determine flow direction of each river segment. Given branching and convergence, some segs might be ambiguoous
     # starting from highest endpoint, walk downstream on riv following branches
     # find segments as all riv points between branches
     # calc mean(diff([nearestnode_ndownstream(rivpt) for each riv pt in segment in order from bifur point])
@@ -607,6 +699,7 @@ def remap_riv_network(source, target, env):
     visited = set()
     segments = defaultdict(list)
     next_rivpt = defaultdict(list) # dictionary keyed on rivpt (j,i) indicating next pt flow-dir-wise (will be multiple pts at bifur
+    prev_rivpt = defaultdict(list)
     maxsegi = cursegi
     while tovisit:
         j, i, cursegi = tovisit.pop()
@@ -622,10 +715,12 @@ def remap_riv_network(source, target, env):
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
                     for thisji, nextji in zip(segpts[:-1], segpts[1:]):
                         next_rivpt[thisji].append(nextji)
+                        prev_rivpt[nextji].append(thisji)
                 else: # upstream
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'upstream')
                     for thisji, nextji in zip(segpts[1:], segpts[:-1]):
                         next_rivpt[thisji].append(nextji)
+                        prev_rivpt[nextji].append(thisji)
 
         visited.add((j,i))
         for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
@@ -644,9 +739,14 @@ def remap_riv_network(source, target, env):
                         break
 # by here, next_rivpt gives us flowdirection
 
+    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
+    # Force river path to start at largest upstream mainstem node.
+    # Trim river so it starts at mainstem, and if necessary extend river to mainstem node
+    # and adjust network data to reflect changes
+    rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv = _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine)
+
     branch = 'a'
     next_branch = 'b'
-    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
     to_visit = []
     for riv_pt in initial_riv_pts:
         node = nearestnode_to_riv[riv_pt]
