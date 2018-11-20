@@ -679,14 +679,58 @@ def remap_riv_network(source, target, env):
         nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
         nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
 
+    #import ipdb;ipdb.set_trace()
     endpoints = np.where(rivers==1)
     endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
     ndown_mean = np.mean(endpoints_ndown)
     ndown_std = np.std(endpoints_ndown)
     ndown_z = (np.array(endpoints_ndown) - ndown_mean) / ndown_std
     upstream_endpoints = np.where(ndown_z > 1)
+    #downstream_endpoints =
     head_endpoint_i = np.argmax(ndown_z[upstream_endpoints])
     head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
+
+    # Find "coastal" nodes by seeing where a node has a missing neighbor
+    # (ignore border nodes since those probably on clipped delta boundary - ok since dist will find a neighbor)
+    coastal = [] # true or false
+    # Use that to calc dist-to-coast for each node
+    dist_to_coast = []
+    # That determines flowdir
+
+    # find coastal nodes
+    minj = min([node[0] for node in nodes])
+    maxj = max([node[0] for node in nodes])
+    mini = min([node[1] for node in nodes])
+    maxi = max([node[1] for node in nodes])
+    for node in nodes:
+        if (not (minj < node[0] < maxj) or not (mini < node[1] < maxi)):
+            coastal.append(False)
+            continue
+        foundedge = False
+        for dj in [-1,0,1]:
+            for di in [-1,0,1]:
+                if (dj == di == 0):
+                    continue
+                othernode = (node[0] + dj, node[1] + di)
+                if othernode not in nodes:
+                    foundedge = True
+                    break
+            if foundedge:
+                break
+        coastal.append(foundedge)
+
+    # calc dist-to-coast
+    for node in nodes:
+        mindist = np.inf
+        for i, iscoastal in enumerate(coastal):
+            if not iscoastal:
+                continue
+            coastalnode = nodes[i]
+            dist = np.sqrt((node[0]-coastalnode[0])**2 + (node[1]-coastalnode[1])**2)
+            if dist < mindist:
+                mindist = dist
+        dist_to_coast.append(mindist)
+
 
     # Determine flow direction of each river segment. Given branching and convergence, some segs might be ambiguoous
     # starting from highest endpoint, walk downstream on riv following branches
@@ -705,11 +749,20 @@ def remap_riv_network(source, target, env):
         j, i, cursegi = tovisit.pop()
         segments[cursegi].append((j,i))
         if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
-            if len(segments[cursegi]) > 1: # at end of segment
-                segpts = segments[cursegi]
-                ndowns = [nearestnode_ndownstream[pt] for pt in segpts]
+            segpts = segments[cursegi]
+            if len(segpts) > 1: # at end of segment
+                #ndowns = [nearestnode_ndownstream[pt] for pt in segpts]
+                #diststocoast = [dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
+                # use both ndownstream metric (which uses initial non-bifur network), and dist-to-coast by summimg them. maybe better??? both individually have problems
+                diststocoast = [nearestnode_ndownstream[pt] + dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
                 n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
-                dir_metric = np.mean(np.diff(ndowns))
+                #if rivers[j,i] == 1 and n_nodes_on_seg <= 2:
+                    # short stub, dont follow
+                    #print(cursegi, segpts[0], segpts[-1], 'too short, ignoring')
+                    #continue
+
+                #dir_metric = np.mean(np.diff(ndowns))
+                dir_metric = np.mean(np.diff(diststocoast))
                 # mark next riv pts
                 if (dir_metric <= 0) or (n_nodes_on_seg <= 1): # downstream, and dont set very short segs to upstream
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
@@ -862,8 +915,11 @@ def remap_riv_network(source, target, env):
                     branch += next_branch
                     next_branch = chr(ord(next_branch)+1)
                 to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
-        if len(next_rivpt[rivj,rivi]) == 0:
-            # no downstream points, remove downstream flow from node
+        if ((len(next_rivpt[rivj,rivi]) == 0) and
+            (dist_to_coast[nodes.index(nearestnode_to_riv[rivj,rivi])] <= 3)): # node units
+            # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
+            # dont do this for likely upstream points, just leave existing connections
+            # helps with errors in osm_river, dont want to strand water upstream
             # next_node is next if we just moved to new one, or last_node if we didn't
             outlets.add(next_cell)
             for node2 in list(G.successors(next_node)):
