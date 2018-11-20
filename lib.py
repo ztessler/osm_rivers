@@ -153,12 +153,12 @@ def skeleton_riv(source, target, env):
     holethresh = env.get('holethresh', 1000)
     rivers = morph.remove_small_holes(rivers, min_size=holethresh, connectivity=2)
 
-    rivers, distance = morph.medial_axis(rivers, return_distance=True)
+    rivers = morph.skeletonize(rivers)
     rivers = rivers.astype(np.uint8)
 
     # another closing to fix weird checkerboards and stuff
     rivers = morph.binary_closing(rivers, morph.square(3))
-    skeleton, distance = morph.medial_axis(rivers, return_distance=True)
+    skeleton = morph.skeletonize(rivers)
     skeleton = skeleton.astype(np.uint8)
     skeleton[skeleton>0] = 1
 
@@ -237,7 +237,7 @@ def trim_short_rivs(source, target, env):
         rivers[j,i] = 0
 
     # rerun skeleton to clean corners where short segments were clipped off
-    skeleton, distance = morph.medial_axis(rivers, return_distance=True)
+    skeleton = morph.skeletonize(rivers)
     rivers = skeleton.astype(np.uint8)
     rivers[rivers>0] = 1
 
