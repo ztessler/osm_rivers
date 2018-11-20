@@ -228,7 +228,7 @@ def trim_short_rivs(source, target, env):
                     i2 = i + di
                     if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and (rivers[j2, i2]==rivval):
                         branches.append((j2,i2))
-            if len(branches) == 3 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(branches, 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
+            if len(branches) >= 3 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(branches, 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
                 for (j2, i2) in branches:
                     segment = _count_and_trim_segment(j2, i2, [(j,i)]+branches, 1, minlen, rivers, rivval)
                     if len(segment) < minlen:
