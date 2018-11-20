@@ -59,8 +59,8 @@ thumbnail_size = 300
 # project and clip river vectors to delta
 clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
 proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
-env.Command(
-        source=[OSMrivers, deltashp],
+myCommand(
+        source=[merged_shps, deltashp],
         target=[clipped_vec, proj4str],
         action=lib.project_and_clip_osm_rivers)
 p = myCommand(
@@ -76,7 +76,7 @@ p = myCommand(
 env.Default(p)
 
 thinned_vec = os.path.join(deltawork, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
-env.Command(
+myCommand(
         source=clipped_vec,
         target=thinned_vec,
         action=lib.thin_vec,
@@ -91,7 +91,7 @@ env.Default(p)
 
 # rasterize
 riv_rast = os.path.join(deltawork, '{0}_riv_rast.tif'.format(delta))
-env.Command(
+myCommand(
         source=thinned_vec,
         target=riv_rast,
         action=lib.rasterize_riv,
@@ -104,7 +104,7 @@ env.Default(p)
 
 # skeletonize raster
 riv_skel = os.path.join(deltawork, '{0}_riv_skeleton.tif'.format(delta))
-env.Command(
+myCommand(
         source=riv_rast,
         target=riv_skel,
         action=lib.skeleton_riv,
@@ -118,7 +118,7 @@ env.Default(p)
 
 # drop small rivers
 riv_dropped_small = os.path.join(deltawork, '{0}_riv_dropped_pieces.tif'.format(delta))
-env.Command(
+myCommand(
         source=riv_skel,
         target=riv_dropped_small,
         action=lib.keep_n_rivers,
@@ -202,7 +202,7 @@ b = env.Command(
         action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
 env.Default(b)
 
-for networkversion, network_name in [(networkdelta, ''), (bifurnetwork, 'bifur_')]:
+for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:
     for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
         p = myCommand(
                 source=[networkversion, bifur_grid],
