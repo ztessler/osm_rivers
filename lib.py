@@ -613,9 +613,9 @@ def remap_riv_network(source, target, env):
             downj = None; downi = None
             for j, i in zip(rowidx, colidx):
                 # walk new line, setup prev, next, and nearest dicts
-                if (downj is not None) and (previ is not None):
+                if (downj is not None) and (downi is not None):
                     prev_rivpt[downj,downi].append((j, i))
-                    next_rivt[j, i].append((downj, downi))
+                    next_rivpt[j,i].append((downj, downi))
                     xy = affine * (j, i)
                     allbasinmask = [1 for pos in positions]
                     nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
@@ -644,14 +644,15 @@ def remap_riv_network(source, target, env):
             return rivers, rivpt, initial_riv_pts, node, next_rivpt, prev_rivpt, nearestnode_to_riv
         else:
             to_visit = initial_riv_pts
+            head_node_xy = positions[head_node_i]
             head_node_x, head_node_y = positions[head_node_i]
-            head_node_ij = ~affine * (head_node_x, head_node_y)
+            head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
             mindist = np.inf
             while to_visit:
                 rivpt = to_visit.pop()
                 rivj, rivi = rivpt
                 rivx, rivy = affine * (rivi,rivj)
-                dist = np.sqrt((head_node_x - rivx)**2 + (head_nody_y - rivy)**2)
+                dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
                 if dist < mindist:
                     mindist = dist
                     mindist_rivpt = rivpt
