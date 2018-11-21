@@ -697,15 +697,16 @@ def remap_riv_network(source, target, env):
         nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
         nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
 
-    #import ipdb;ipdb.set_trace()
     endpoints = np.where(rivers==1)
     endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
     ndown_mean = np.mean(endpoints_ndown)
     ndown_std = np.std(endpoints_ndown)
     ndown_z = (np.array(endpoints_ndown) - ndown_mean) / ndown_std
-    upstream_endpoints = np.where(ndown_z > 1)
+    upstream_endpoints_ind = np.where(ndown_z > 1)
+    #import ipdb;ipdb.set_trace()
+    upstream_endpoints = [list(zip(*endpoints))[i] for i in upstream_endpoints_ind[0]]
     #downstream_endpoints =
-    head_endpoint_i = np.argmax(ndown_z[upstream_endpoints])
+    head_endpoint_i = np.argmax(ndown_z[upstream_endpoints_ind])
     head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
 
     # Find "coastal" nodes by seeing where a node has a missing neighbor
@@ -782,7 +783,7 @@ def remap_riv_network(source, target, env):
                 #dir_metric = np.mean(np.diff(ndowns))
                 dir_metric = np.mean(np.diff(diststocoast))
                 # mark next riv pts
-                if (dir_metric <= 0) or (n_nodes_on_seg <= 1): # downstream, and dont set very short segs to upstream
+                if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or (segpts[0] in upstream_endpoints)) and (not segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
                     for thisji, nextji in zip(segpts[:-1], segpts[1:]):
                         next_rivpt[thisji].append(nextji)
@@ -812,18 +813,19 @@ def remap_riv_network(source, target, env):
 
     ## Go back over segments: for short segments, use direction of longest neighbor. effectively attaches it
     # do all first, then another pass to check/change small ones. look at segments that share same endpoints
+    # upstream endpoints marked good
     #import ipdb;ipdb.set_trace()
     seglens = {}
     for segi, segment in segments.items():
         seglens[segi] = len({nearestnode_to_riv[pt] for pt in segment})
-    goodsegs = {segi: seglen > 2 for segi, seglen in seglens.items()}
+    goodsegs = {segi: ((seglens[segi] > 2) or (seg[0] in upstream_endpoints)  or (seg[-1] in upstream_endpoints)) for segi, seg in segments.items()}
     count = 0
     # set direction of small segments to match longest neighboring segment that flows INTO segment
     # track "good" (long or fixed) segments, iterate until all good
     while not np.all(list(goodsegs.values())):
         count += 1
         if count > 100:
-            raise NotImplementedError('Flow direction can not be determined for some segments')
+            raise NotImplementedError('Flow direction can not be determined for some segments. Goodsegs: {}'.format(str(goodsegs)))
 
         for segi, segment in segments.items():
             if not goodsegs[segi]:
@@ -873,7 +875,7 @@ def remap_riv_network(source, target, env):
 
 
 
-    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
+    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints_ind[0]]
     # Force river path to start at largest upstream mainstem node.
     # Trim river so it starts at mainstem, and if necessary extend river to mainstem node
     # and adjust network data to reflect changes
