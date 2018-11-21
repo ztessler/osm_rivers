@@ -129,9 +129,15 @@ p = env.Command(
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
+bifur_precleaned = os.path.join(deltawork,'{0}_bifurs_precleaned.tif'.format(delta))
+env.Command(
+        source=riv_dropped_small,
+        target=bifur_precleaned,
+        action=lib.find_bifurs)
+
 riv_clean = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
-        source=riv_dropped_small,
+        source=bifur_precleaned,
         target=riv_clean,
         action=lib.trim_short_rivs,
         minlen=40)

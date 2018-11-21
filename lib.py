@@ -188,9 +188,13 @@ def keep_n_rivers(source, target, env):
     return 0
 
 
-def _count_and_trim_segment(j, i, skip, n, minlen, rivers, rivval):
+def _walk_to_branch_end(j, i, skip, n, minlen, rivers):
     if n > minlen:
         return [(j,i)]
+    if rivers[j,i] == 3:
+        # found another bifurcation. return a long list of fake points so this segment
+        #isn't deleted. last point can't have rivers == 1, so use this one, which is == 3
+        return [(j,i)] * minlen
     downstream = []
     for dj in [-1, 0, 1]:
         for di in [-1, 0, 1]:
@@ -198,16 +202,13 @@ def _count_and_trim_segment(j, i, skip, n, minlen, rivers, rivval):
                 continue
             j2 = j + dj
             i2 = i + di
-            if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]==rivval):
-                downstream.extend(_count_and_trim_segment(j2, i2, skip+[(j,i)], n+1, minlen, rivers, rivval))
-    return (downstream + [(j,i)])
-
-def _notnextto(a,b):
-    if a[0] == b[0]:
-        return abs(a[1]-b[1]) > 1
-    if a[1] == b[1]:
-        return abs(a[0]-b[0]) > 1
-    return True
+            if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]>0):
+                downstream.extend(_walk_to_branch_end(j2, i2, skip+[(j,i)], n+1, minlen, rivers))
+                if len(downstream) > minlen: # need this if bifur point was found, dont want to keep looping around looking for more branches
+                    break
+        if len(downstream) > minlen:
+            break
+    return [(j,i)] + downstream
 
 def trim_short_rivs(source, target, env):
     with rasterio.open(str(source[0])) as rast:
@@ -215,10 +216,16 @@ def trim_short_rivs(source, target, env):
         meta = rast.meta.copy()
     minlen = env.get('minlen', 10)
 
-    rivval = rivers.max()
-    wet = np.where(rivers==rivval)
-    todelete = []
-    for j,i in zip(*wet):
+    # need to loop since after a pass we could still be left with short branches.
+    # if we have a short segment between two bifur points, with two short branches on one end,
+    # cleaning one short branch can still leave the bifur->bifur segment + one branch
+    # too short. trim again and loop as long as rivers keeps changing
+    while True:
+        prevrivers = rivers.copy()
+
+        bifurs = np.where(rivers==3)
+        todelete = set()
+        for j,i in zip(*bifurs):
             branches = []
             for dj in [-1, 0, 1]:
                 for di in [-1, 0, 1]:
@@ -226,23 +233,37 @@ def trim_short_rivs(source, target, env):
                         continue
                     j2 = j + dj
                     i2 = i + di
-                    if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and (rivers[j2, i2]==rivval):
+                    if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and (rivers[j2, i2]>0):
                         branches.append((j2,i2))
-            if len(branches) >= 3 and np.all([_notnextto(a,b) for (a,b) in itertools.combinations(branches, 2)]): # self and 3 neighbors, not right next to each other. if they share faces then other configs that aren't splits can still have 3 neighbors
-                for (j2, i2) in branches:
-                    segment = _count_and_trim_segment(j2, i2, [(j,i)]+branches, 1, minlen, rivers, rivval)
-                    if len(segment) < minlen:
-                        todelete.extend(segment)
-    for j,i in todelete:
-        rivers[j,i] = 0
+            todelete = []
+            for (j2, i2) in branches:
+                segment = _walk_to_branch_end(j2, i2, [(j,i)]+branches, 1, minlen, rivers)
+                if rivers[segment[-1]] == 1: # found terminating segment shorter than minlen
+                    todelete.append(segment)
+            #if len(segments) == 1, just a stub, gets deleted (other branches are longer, or non-terminating)
+            if len(todelete) == 2:
+                # two terminating branches
+                # keep longer segment, will get appended to last segment
+                seglens = [len(segment) for segment in todelete]
+                longest_i = np.argmax(seglens)
+                todelete.pop(longest_i)
+            if todelete:
+                rivers[j,i] = 2 # old bifur point becomes normal river
+            for segment in todelete:
+                for rivpt in segment: #skip first point, will still be on network
+                    rivers[rivpt] = 0
 
-    # rerun skeleton to clean corners where short segments were clipped off
-    skeleton = morph.skeletonize(rivers)
-    rivers = skeleton.astype(np.uint8)
-    rivers[rivers>0] = 1
+        # run skeleton to clean corners where short segments were clipped off
+        # dont want to overwrite bifur info though
+        justrivers = (rivers>0).astype(np.uint8)
+        justrivers = morph.skeletonize(justrivers)
+        rivers[justrivers==0] = 0
+
+        if np.all(rivers == prevrivers):
+            break
 
     with rasterio.open(str(target[0]), 'w', **meta) as out:
-        out.write(rivers, 1)
+        out.write(justrivers.astype(np.uint8), 1)
     return 0
 
 
