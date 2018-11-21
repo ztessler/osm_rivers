@@ -814,6 +814,69 @@ def remap_riv_network(source, target, env):
                         break
 # by here, next_rivpt gives us flowdirection
 
+    ## Go back over segments: for short segments, use direction of longest neighbor. effectively attaches it
+    # do all first, then another pass to check/change small ones. look at segments that share same endpoints
+    #import ipdb;ipdb.set_trace()
+    seglens = {}
+    for segi, segment in segments.items():
+        seglens[segi] = len({nearestnode_to_riv[pt] for pt in segment})
+    goodsegs = {segi: seglen > 2 for segi, seglen in seglens.items()}
+    count = 0
+    # set direction of small segments to match longest neighboring segment that flows INTO segment
+    # track "good" (long or fixed) segments, iterate until all good
+    while not np.all(list(goodsegs.values())):
+        count += 1
+        if count > 100:
+            raise NotImplementedError('Flow direction can not be determined for some segments')
+
+        for segi, segment in segments.items():
+            if not goodsegs[segi]:
+                neighbor_segments = []
+                for segj, otherseg in segments.items():
+                    if otherseg == segment:
+                        continue
+                    if len(otherseg) < 3:
+                        continue
+                    if (((otherseg[0] == segment[0]) and (otherseg[1] in next_rivpt[otherseg[2]])) or
+                        ((otherseg[0] == segment[-1]) and (otherseg[1] in next_rivpt[otherseg[2]])) or
+                        ((otherseg[-1] == segment[0]) and (otherseg[-2] in next_rivpt[otherseg[-3]])) or
+                        ((otherseg[-1] == segment[-1]) and (otherseg[-2] in next_rivpt[otherseg[-3]]))):
+                        # otherseg flows INTO segment
+                        if goodsegs[segj]:
+                            neighbor_segments.append((segj, otherseg))
+                if not neighbor_segments:
+                    continue
+                longest_i = np.argmax([len(seg) for segj, seg in neighbor_segments])
+                segj, otherseg = neighbor_segments[longest_i]
+                # check how segments are aligned, and set segment based on flow dir in otherseg
+                if otherseg[0] == segment[0]:
+                    if otherseg[2] in next_rivpt[otherseg[1]]: # go inside otherseg a bit, endpoint may have been overwritten by this short segment in code above
+                        pairs = zip(segment[1:], segment[:-1])
+                    else:
+                        pairs = zip(segment[:-1], segment[1:])
+                if otherseg[0] == segment[-1]:
+                    if otherseg[2] in next_rivpt[otherseg[1]]:
+                        pairs = zip(segment[:-1], segment[1:])
+                    else:
+                        pairs = zip(segment[1:], segment[:-1])
+                if otherseg[-1] == segment[0]:
+                    if otherseg[-2] in next_rivpt[otherseg[-3]]:
+                        pairs = zip(segment[:-1], segment[1:])
+                    else:
+                        pairs = zip(segment[1:], segment[:-1])
+                if otherseg[-1] == segment[-1]:
+                    if otherseg[-2] in next_rivpt[otherseg[-3]]:
+                        pairs = zip(segment[1:], segment[:-1])
+                    else:
+                        pairs = zip(segment[:-1], segment[1:])
+                for thisji, nextji in pairs:
+                    next_rivpt[thisji] = [nextji]
+                    prev_rivpt[nextji] = [thisji]
+                goodsegs[segi] = True
+                print('Fixed direction on segment {0}, matched to segment {1}'.format(segi, segj))
+
+
+
     initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints[0]]
     # Force river path to start at largest upstream mainstem node.
     # Trim river so it starts at mainstem, and if necessary extend river to mainstem node
