@@ -414,7 +414,7 @@ def plot_network_map(source, target, env):
             cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
     for t in ax.texts:
         t.set_clip_on(False)
-        #t.set_rotation(20)
+        t.set_rotation(30)
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
