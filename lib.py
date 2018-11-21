@@ -191,23 +191,20 @@ def keep_n_rivers(source, target, env):
 def _walk_to_branch_end(j, i, skip, n, minlen, rivers):
     if n > minlen:
         return [(j,i)]
-    if rivers[j,i] == 3:
+    if rivers[j,i] >= 3:
         # found another bifurcation. return a long list of fake points so this segment
         #isn't deleted. last point can't have rivers == 1, so use this one, which is == 3
-        return [(j,i)] * minlen
+        return [(j,i)] * (minlen+1)
     downstream = []
-    for dj in [-1, 0, 1]:
-        for di in [-1, 0, 1]:
-            if dj == di == 0:
-                continue
-            j2 = j + dj
-            i2 = i + di
-            if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]>0):
-                downstream.extend(_walk_to_branch_end(j2, i2, skip+[(j,i)], n+1, minlen, rivers))
-                if len(downstream) > minlen: # need this if bifur point was found, dont want to keep looping around looking for more branches
-                    break
-        if len(downstream) > minlen:
-            break
+    for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
+        if dj == di == 0:
+            continue
+        j2 = j + dj
+        i2 = i + di
+        if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and ((j2, i2) not in skip) and (rivers[j2, i2]>0):
+            downstream.extend(_walk_to_branch_end(j2, i2, skip+[(j,i)], n+1, minlen, rivers))
+            if len(downstream) > minlen: # need this if bifur point was found, dont want to keep looping around looking for more branches
+                break
     return [(j,i)] + downstream
 
 def trim_short_rivs(source, target, env):
@@ -223,10 +220,10 @@ def trim_short_rivs(source, target, env):
     while True:
         prevrivers = rivers.copy()
 
-        bifurs = np.where(rivers==3)
-        todelete = set()
+        bifurs = np.where(rivers>=3)
         for j,i in zip(*bifurs):
             branches = []
+            todelete = []
             for dj in [-1, 0, 1]:
                 for di in [-1, 0, 1]:
                     if dj == di == 0:
@@ -235,23 +232,22 @@ def trim_short_rivs(source, target, env):
                     i2 = i + di
                     if (j2<rivers.shape[0]) and (i2<rivers.shape[1]) and (rivers[j2, i2]>0):
                         branches.append((j2,i2))
-            todelete = []
             for (j2, i2) in branches:
                 segment = _walk_to_branch_end(j2, i2, [(j,i)]+branches, 1, minlen, rivers)
                 if rivers[segment[-1]] == 1: # found terminating segment shorter than minlen
                     todelete.append(segment)
             #if len(segments) == 1, just a stub, gets deleted (other branches are longer, or non-terminating)
-            if len(todelete) == 2:
-                # two terminating branches
-                # keep longer segment, will get appended to last segment
-                seglens = [len(segment) for segment in todelete]
-                longest_i = np.argmax(seglens)
-                todelete.pop(longest_i)
             if todelete:
-                rivers[j,i] = 2 # old bifur point becomes normal river
-            for segment in todelete:
-                for rivpt in segment: #skip first point, will still be on network
-                    rivers[rivpt] = 0
+                if len(todelete) == 2:
+                    # two terminating branches
+                    # keep longer segment, will get appended to last segment
+                    seglens = [len(segment) for segment in todelete]
+                    longest_i = np.argmax(seglens)
+                    todelete.pop(longest_i)
+                rivers[j,i] -= 1 # old bifur point becomes normal river, or a four-way becomes three-way
+                for segment in todelete:
+                    for rivpt in segment: # bifur point not included on segment
+                        rivers[rivpt] = 0
 
         # run skeleton to clean corners where short segments were clipped off
         # dont want to overwrite bifur info though
