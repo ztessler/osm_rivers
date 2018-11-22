@@ -1,4 +1,5 @@
 import csv
+import pickle
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -411,6 +412,49 @@ def plot_network_map(source, target, env):
     for t in ax.texts:
         t.set_clip_on(False)
         t.set_rotation(30)
+
+    I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
+    xs, ys = affine * (I.flatten(), J.flatten())
+    X = xs.reshape(I.shape)
+    Y = ys.reshape(J.shape)
+
+    bifurs_mask = np.ma.masked_equal(bifurs, 0)
+    ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
+    ax.axis([X.min(), X.max(), Y.min(), Y.max()])
+    ax.set_aspect('equal')
+
+    ax.xaxis.set_ticks([])
+    ax.yaxis.set_ticks([])
+
+    fig.savefig(str(target[0]))
+    return 0
+
+
+def plot_flowdirs_map(source, target, env):
+    with rasterio.open(str(source[0]), 'r') as rast:
+        bifurs = rast.read(1)
+        affine = rast.transform
+
+    with open(str(source[1]), 'rb') as fin:
+        segments = pickle.load(fin)
+
+    with open(str(source[2]), 'rb') as fin:
+        next_rivpts = pickle.load(fin)
+
+    mpl.style.use('ggplot')
+    fig, ax = plt.subplots(1,1, figsize=(8, 12))#, dpi=300)
+
+    for segi, segment in segments.items():
+        x1, y1 = affine * segment[0][::-1]
+        x2, y2 = affine * segment[-1][::-1]
+        if segment[1] in next_rivpts[segment[0]]:
+            # flows from 0 to end
+            ax.annotate(segi, xy=(x2,y2), xytext=(x1,y1),
+                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='->'))
+        elif segment[0] in next_rivpts[segment[1]]:
+            # flows from end to 0
+            ax.annotate(segi, xy=(x1,y1), xytext=(x2,y2),
+                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='->'))
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
@@ -1045,5 +1089,10 @@ def remap_riv_network(source, target, env):
     with open(str(target[2]), 'w') as fout:
         for outlet in sorted(outlets):
             fout.write(str(outlet)+'\n')
+
+    with open(str(target[3]), 'wb') as fout:
+        pickle.dump(segments, fout)
+    with open(str(target[4]), 'wb') as fout:
+        pickle.dump(next_rivpt, fout)
 
     return 0
