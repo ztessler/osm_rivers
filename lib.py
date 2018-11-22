@@ -867,9 +867,16 @@ def remap_riv_network(source, target, env):
                         pairs = zip(segment[1:], segment[:-1])
                     else:
                         pairs = zip(segment[:-1], segment[1:])
-                for thisji, nextji in pairs:
-                    next_rivpt[thisji] = [nextji]
-                    prev_rivpt[nextji] = [thisji]
+                for i, (thisji, nextji) in enumerate(pairs):
+                    # dont just overwrite. bifur points need multiple next_rivpts, dont want to lose other branch
+                    if i==0:
+                        next_rivpt[thisji].append(nextji)
+                    else:
+                        next_rivpt[thisji] = [nextji]
+                    if i==(len(list(pairs)) - 1):
+                        prev_rivpt[nextji].append(thisji)
+                    else:
+                        prev_rivpt[nextji] = [thisji]
                 goodsegs[segi] = True
                 print('Fixed direction on segment {0}, matched to segment {1}'.format(segi, segj))
 
