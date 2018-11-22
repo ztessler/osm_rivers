@@ -40,21 +40,33 @@ GHAASBIN = env['ENV']['GHAASBIN']
 
 domain = os.environ.get('DOMAIN', 'Mekong')
 delta = os.environ.get('DELTA', 'Mekong')
-OSMriver = os.environ.get('OSMriver', 'vietnam')
+#OSMrivers = os.environ.get('OSMriver', 'vietnam:cambodia').split(':')
+OSMrivers = os.environ.get('OSMriver', 'vietnam').split(':')
 STNres = os.environ.get('STNres', '06min')
 
 deltawork = os.path.join('work', delta) # SSEA domain can reuse some single-domain files
 domainwork = os.path.join('work', domain, delta, STNres)
+domain_nores_work = os.path.join('work', domain, delta)
 output = os.path.join('output', domain, STNres)
 deltafigures = os.path.join('figures', delta)
 domainfigures = os.path.join('figures', domain, delta, STNres)
 
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
 #STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/SSEA/{res}/SSEA_Network_{res}.gdbn'.format(res=STNres)
-OSMrivers = '/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver)
+OSMshps = ['/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
 thumbnail_size = 300
+
+# merge multiple country-level data if necessary
+if len(OSMshps) > 1:
+    merged_shps = os.path.join(domain_nores_work, 'merged_rivs.shp')
+    env.Command(
+            source=OSMshps,
+            target=merged_shps,
+            action='ogrmerge.py -single -o $TARGET $SOURCES')
+else:
+    merged_shps = OSMshps[0]
 
 # project and clip river vectors to delta
 clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
