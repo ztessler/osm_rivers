@@ -449,12 +449,14 @@ def plot_flowdirs_map(source, target, env):
         x2, y2 = affine * segment[-1][::-1]
         if segment[1] in next_rivpts[segment[0]]:
             # flows from 0 to end
-            ax.annotate(segi, xy=(x2,y2), xytext=(x1,y1),
-                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='->'))
+            ax.annotate("", xy=(x2,y2), xytext=(x1,y1),
+                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='-|>'))
+            ax.text((x2+x1)/2, (y2+y1)/2, segi)
         elif segment[0] in next_rivpts[segment[1]]:
             # flows from end to 0
-            ax.annotate(segi, xy=(x1,y1), xytext=(x2,y2),
-                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='->'))
+            ax.annotate("", xy=(x1,y1), xytext=(x2,y2),
+                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='-|>'))
+            ax.text((x2+x1)/2, (y2+y1)/2, segi)
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
