@@ -935,8 +935,8 @@ def remap_riv_network(source, target, env):
     # and adjust network data to reflect changes
     rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv = _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine)
 
-    branch = 'a'
-    next_branch = 'b'
+    branch = 1
+    next_branch = 2
     to_visit = []
     for riv_pt in initial_riv_pts:
         node = nearestnode_to_riv[riv_pt]
@@ -944,7 +944,7 @@ def remap_riv_network(source, target, env):
         G.nodes[node]['branches'] = {branch}
         to_visit.append((riv_pt, node_i, branch))
         branch = next_branch
-        next_branch = chr(ord(next_branch)+1)
+        next_branch += 1
 
     # walk down river
     edits = defaultdict(dict)
@@ -1045,13 +1045,16 @@ def remap_riv_network(source, target, env):
             next_node_i = last_node_i
             next_cell = last_cell
 
-        for branch_i, (rivj2,rivi2) in enumerate(next_rivpt[rivj,rivi]):
+        next_rivpts = next_rivpt[rivj,rivi]
+        for rivj2,rivi2 in next_rivpts:
             if ((rivj2, rivi2), last_node_i) not in visited:
                 # when rivers converg, keep both branches, could loose a convergence here if last node on one branch is too far away to jump before the branch is dropped
-                if branch_i > 0: # keep same branch name on first bifur side, add letter on other side
-                    branch += next_branch
-                    next_branch = chr(ord(next_branch)+1)
-                to_visit.append(((rivj2, rivi2), next_node_i, branch)) # first branch stays the same
+                if len(next_rivpts) > 1: # new branches
+                    newbranch = next_branch
+                    next_branch += 1
+                else:
+                    newbranch = branch # really same branch
+                to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
             (dist_to_coast[nodes.index(nearestnode_to_riv[rivj,rivi])] <= 3)): # node units
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
