@@ -947,7 +947,7 @@ def remap_riv_network(source, target, env):
         next_branch += 1
 
     # walk down river
-    edits = defaultdict(dict)
+    edits = defaultdict(lambda: defaultdict(dict))
     visited = set()
     outlets = set()
     while to_visit:
@@ -988,54 +988,65 @@ def remap_riv_network(source, target, env):
                 (riv_near_node)):        # helps reduce zig-zag
             if ((next_cell in edits) and
                    (last_cell in edits[next_cell]) and
-                   (edits[next_cell][last_cell] is not None)):
+                   (branch in edits[next_cell][last_cell]) and
+                   (edits[next_cell][last_cell][branch] is not None)):
                 # if water already rerouted from next_cell to last_cell, undo that and dont add new edit
                 # fixes issue where meandering river goes back and forth between two nodes and second
                 # rerouting overwrites the first. remove both to leave water where it was.
                 print('Undo:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                 G.remove_edge(next_node, last_node)
                 G.nodes[last_node]['branches'].discard(branch)
-                del edits[next_cell][last_cell]
+                del edits[next_cell][last_cell][branch]
             else:
                 # regular re-routing
-                # create a new link
-                if 'branches' not in G.nodes[next_node]:
-                    G.nodes[next_node]['branches'] = {branch}
-                else:
-                    G.nodes[next_node]['branches'].add(branch)
-                print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
-                edits[last_cell][next_cell] = True
-                for downstream_node in list(G.successors(last_node)):
-                    # remove existing downstream links
-                    downstream_cell = cellid[nodes.index(downstream_node)]
-                    if (downstream_cell not in edits[last_cell]):
-                        print('Remove:', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
-                        G.remove_edge(last_node, downstream_node)
-                        edits[last_cell][downstream_cell] = None
-                if last_node in list(G.successors(next_node)):
-                    # if changing direction, remove previous wrong-direction link
-                    print('Remove:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
-                    G.remove_edge(next_node, last_node)
-                    edits[next_cell][last_cell] = None
-                G.add_edge(last_node, next_node)
+                # but dont make link if another branch already goes from next_cell TO last_cell
+                # this means(or, can happend when?) a new branch backtracks to previous cell
+                # dont want to delete link since that branch should stay. just dont make new link
+                # and branch will continue on elsewhere
+                if not ((next_cell in edits) and
+                        (last_cell in edits[next_cell]) and
+                        (len(edits[next_cell][last_cell].values()) > 0) and
+                        (branch not in edits[next_cell][last_cell]) and
+                        (None not in edits[next_cell][last_cell].values())):
 
-                # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
-                if ((abs(last_node[0]-next_node[0]) == 1) and
-                    (abs(last_node[1]-next_node[1]) == 1)):
-                    corner1_node = (next_node[0], last_node[1])
-                    corner2_node = (last_node[0], next_node[1])
-                    corner1_cell = cellid[nodes.index(corner1_node)]
-                    corner2_cell = cellid[nodes.index(corner2_node)]
-                    if (corner1_node in G.succ[corner2_node]):
-                        G.remove_edge(corner2_node, corner1_node)
-                        edits[corner2_cell][corner1_cell] = None
-                        G.add_edge(corner2_node, next_node)
-                        edits[corner2_cell][next_cell] = True # anything other than None
-                    if (corner2_node in G.succ[corner1_node]):
-                        G.remove_edge(corner1_node, corner2_node)
-                        edits[corner1_cell][corner2_cell] = None
-                        G.add_edge(corner1_node, next_node)
-                        edits[corner1_cell][next_cell] = True # anything other than None
+                    # create a new link
+                    if 'branches' not in G.nodes[next_node]:
+                        G.nodes[next_node]['branches'] = {branch}
+                    else:
+                        G.nodes[next_node]['branches'].add(branch)
+                    print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+                    edits[last_cell][next_cell][branch] = True
+                    for downstream_node in list(G.successors(last_node)):
+                        # remove existing downstream links
+                        downstream_cell = cellid[nodes.index(downstream_node)]
+                        if (downstream_cell not in edits[last_cell]):
+                            print('Remove(a):', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
+                            G.remove_edge(last_node, downstream_node)
+                            edits[last_cell][downstream_cell][branch] = None
+                    if last_node in list(G.successors(next_node)):
+                        # if changing direction, remove previous wrong-direction link
+                        print('Remove(b):', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
+                        G.remove_edge(next_node, last_node)
+                        edits[next_cell][last_cell][branch] = None
+                    G.add_edge(last_node, next_node)
+
+                    # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
+                    if ((abs(last_node[0]-next_node[0]) == 1) and
+                        (abs(last_node[1]-next_node[1]) == 1)):
+                        corner1_node = (next_node[0], last_node[1])
+                        corner2_node = (last_node[0], next_node[1])
+                        corner1_cell = cellid[nodes.index(corner1_node)]
+                        corner2_cell = cellid[nodes.index(corner2_node)]
+                        if (corner1_node in G.succ[corner2_node]):
+                            G.remove_edge(corner2_node, corner1_node)
+                            edits[corner2_cell][corner1_cell][branch] = None
+                            G.add_edge(corner2_node, next_node)
+                            edits[corner2_cell][next_cell][branch] = True # anything other than None
+                        if (corner2_node in G.succ[corner1_node]):
+                            G.remove_edge(corner1_node, corner2_node)
+                            edits[corner1_cell][corner2_cell][branch] = None
+                            G.add_edge(corner1_node, next_node)
+                            edits[corner1_cell][next_cell][branch] = True # anything other than None
 
         elif (not riv_near_node): #or
               #(next_node in nx.ancestors(G, last_node))):
@@ -1065,20 +1076,26 @@ def remap_riv_network(source, target, env):
             for node2 in list(G.successors(next_node)):
                 G.remove_edge(next_node, node2)
                 node2_cell = cellid[nodes.index(node2)]
-                edits[next_cell][node2_cell] = None
+                edits[next_cell][node2_cell][branch] = None
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
         for (from_cell, to_cells) in edits.items():
-            try:
-                frac = 1/len([t for t,b in to_cells.items() if b is not None])
-            except ZeroDivisionError:
-                pass
-            for to_cell, branch in to_cells.items():
+            downstream = 0
+            for to_cell, branches in to_cells.items():
+                branch_found = False
+                for branch, val in branches.items():
+                    if val: # either None or True
+                        branch_found = True
+                if branch_found:
+                    downstream += 1
+            if downstream:
+                frac = 1/downstream
+            for to_cell, branches in to_cells.items():
                 from_node = nodes[cellid.index(from_cell)]
                 to_node = nodes[cellid.index(to_cell)]
                 successors = list(Gorig.successors(from_node))
-                if branch is None: # zero out for removed links
+                if list(branches.values()) == [None]: # zero out for removed links
                     csvwriter.writerow([from_cell, to_cell, 0])
                 else:
                     if ((to_node in successors) and (frac != 1)): # zero out if single downlink changing to multiple
