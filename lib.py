@@ -163,6 +163,31 @@ def skeleton_riv(source, target, env):
     skeleton = skeleton.astype(np.uint8)
     skeleton[skeleton>0] = 1
 
+
+    # at this point can still find non-single-pixel rivers. If multiple rivers intersect
+    # can have "clumps" that aren't identified as bifurs
+    # look for 2x2 river clumps, expand to 3x3 region, remove pixels in clump one at a time
+    # and find a removal that doesn't cut off a branch
+    clump = np.ones((2,2))
+    p = generic_filter(skeleton, np.sum, footprint=clump)
+    clumps = np.where(p == 4)
+    fixed = []
+    for j,i in zip(*clumps):
+        fixed.append(None)
+        region4x4 = skeleton[j-2:j+2, i-2:i+2] # 4x4 around 2x2 clump
+        for dj, di in [(1,1), (1,2), (2,1), (2,2)]:
+            region = region4x4.copy()
+            region[dj,di] = 0
+            labels = morph.label(region, neighbors=8)
+            if labels.max() == 1:
+                fixed[-1] = (dj, di)
+                break
+        if fixed[-1] is None:
+            raise NotImplementedError('changing single pixel is not enough to break 2x2 clump')
+        else:
+            dj, di = fixed[-1]
+            skeleton[j + (dj - 2), i + (di - 2)] = 0
+
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(skeleton, 1)
     return 0
