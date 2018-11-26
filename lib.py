@@ -855,7 +855,7 @@ def remap_riv_network(source, target, env):
                 #dir_metric = np.mean(np.diff(ndowns))
                 dir_metric = np.mean(np.diff(diststocoast))
                 # mark next riv pts
-                if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .05) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.05) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
+                if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .03) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.03) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
                     for thisji, nextji in zip(segpts[:-1], segpts[1:]):
                         next_rivpt[thisji].append(nextji)
