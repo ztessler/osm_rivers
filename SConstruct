@@ -43,6 +43,7 @@ delta = os.environ.get('DELTA', 'Mekong')
 #OSMrivers = os.environ.get('OSMriver', 'vietnam:cambodia').split(':')
 OSMrivers = os.environ.get('OSMriver', 'vietnam').split(':')
 STNres = os.environ.get('STNres', '06min')
+INSPECTfig = os.environ.get('INSPECTfig', None)
 
 deltawork = os.path.join('work', delta) # SSEA domain can reuse some single-domain files
 domainwork = os.path.join('work', domain, delta, STNres)
@@ -229,11 +230,13 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
                 target=os.path.join(domainfigures, '{0}_{1}_{2}_{3}map{4}.png'.format(domain, delta, STNres, network_name, label_name)),
                 action=[lib.plot_network_map,
                         'convert -trim $TARGET $TARGET'],
-                labels=labels)
+                labels=labels,
+                inspect=INSPECTfig)
         env.Default(p)
 p = myCommand(
         source=[bifur_grid, riversegments, flowdir],
         target=os.path.join(domainfigures, '{0}_{1}_{2}_river_flowdirs.png'.format(domain, delta, STNres)),
         action=[lib.plot_flowdirs_map,
-                'convert -trim $TARGET $TARGET'])
+                'convert -trim $TARGET $TARGET'],
+        inspect=INSPECTfig)
 env.Default(p)

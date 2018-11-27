@@ -430,13 +430,15 @@ def plot_network_map(source, target, env):
     elif labeltype == 'none':
         with_labels = False
         labels = {}
-    nx.draw_networkx(G, pos, node_size=(upstream*20), node_color=basin,
+    nx.draw_networkx_nodes(G, pos, node_size=(upstream*20), node_color=basin,
             with_labels=with_labels, labels=labels, font_size=6,
-            arrowsize=10, edge_color='.3', alpha=.8,
-            cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
-    for t in ax.texts:
-        t.set_clip_on(False)
-        t.set_rotation(30)
+            alpha=.5, cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
+    nx.draw_networkx_edges(G, pos, arrowstyle='->', arrowsize=10, node_size=20, edge_color='k', ax=ax)
+    if with_labels:
+        nx.draw_networkx_labels(G, pos, labels=labels, font_size=6, ax=ax)
+        for t in ax.texts:
+            t.set_clip_on(False)
+            t.set_rotation(30)
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
@@ -452,6 +454,8 @@ def plot_network_map(source, target, env):
     ax.yaxis.set_ticks([])
 
     fig.savefig(str(target[0]))
+    if env['inspect'] is not None:
+        plt.show()
     return 0
 
 
@@ -497,6 +501,8 @@ def plot_flowdirs_map(source, target, env):
     ax.yaxis.set_ticks([])
 
     fig.savefig(str(target[0]))
+    if env['inspect'] is not None:
+        plt.show()
     return 0
 
 
