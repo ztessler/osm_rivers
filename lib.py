@@ -853,18 +853,21 @@ def remap_riv_network(source, target, env):
         if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
             segpts = segments[cursegi]
             if len(segpts) > 1: # at end of segment
-                #ndowns = [nearestnode_ndownstream[pt] for pt in segpts]
-                #diststocoast = [dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
-                # use both ndownstream metric (which uses initial non-bifur network), and dist-to-coast by summimg them. maybe better??? both individually have problems
-                diststocoast = [nearestnode_ndownstream[pt] + dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
+                # use both ndownstream metric (which uses initial non-bifur network), and dist-to-coast by summimg them. double weight on dist_to_coast. both individually have problems
+                nodescores = [nearestnode_ndownstream[pt] + 2*dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
                 n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
                 #if rivers[j,i] == 1 and n_nodes_on_seg <= 2:
                     # short stub, dont follow
                     #print(cursegi, segpts[0], segpts[-1], 'too short, ignoring')
                     #continue
 
-                #dir_metric = np.mean(np.diff(ndowns))
-                dir_metric = np.mean(np.diff(diststocoast))
+                diffscores = np.diff(nodescores).tolist()
+                while 0 in diffscores:
+                    diffscores.remove(0)
+                diffscores = np.array(diffscores)
+                diffscores[diffscores<0] = -1
+                diffscores[diffscores>0] = 1
+                dir_metric = np.mean(diffscores) # collapse to 0,1 to remove influence of a few outlier nodes
                 # mark next riv pts
                 if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .03) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.03) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
