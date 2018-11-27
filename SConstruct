@@ -40,8 +40,7 @@ GHAASBIN = env['ENV']['GHAASBIN']
 
 domain = os.environ.get('DOMAIN', 'Mekong')
 delta = os.environ.get('DELTA', 'Mekong')
-#OSMrivers = os.environ.get('OSMriver', 'vietnam:cambodia').split(':')
-OSMrivers = os.environ.get('OSMriver', 'vietnam').split(':')
+OSMrivers = os.environ.get('OSMriver', 'vietnam:cambodia').split(':')
 STNres = os.environ.get('STNres', '06min')
 INSPECTfig = os.environ.get('INSPECTfig', None)
 
@@ -53,7 +52,6 @@ deltafigures = os.path.join('figures', delta)
 domainfigures = os.path.join('figures', domain, delta, STNres)
 
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
-#STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/SSEA/{res}/SSEA_Network_{res}.gdbn'.format(res=STNres)
 OSMshps = ['/Users/ecr/ztessler/projects/CHART/WBM/tools/osm_rivers/osm_data/{0}/gis.osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
@@ -204,13 +202,6 @@ env.Command(
                 proj4str],
         target=[network, networkdelta],
         action=lib.import_rgis_network)
-
-#bifurs = os.path.join(output, '{0}_{1}_simple_bifurcations.csv'.format(delta, STNres))
-#b = env.Command(
-        #source=[networkdelta, bifur_grid, basins.format(ext='tif')],
-        #target=bifurs,
-        #action=lib.simple_bifurcations) # finds where osm river hits a subbasin that isn't on the main basin, and creates a bifurcation there
-#env.Default(b)
 
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
