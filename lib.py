@@ -579,7 +579,7 @@ def remap_riv_network(source, target, env):
         nearest = nearestnode_to_riv[head_rivpt]
 
         if head_node == nearest:
-            return rivers, head_rivpt, initial_riv_pts, largest, next_rivpt, prev_rivpt, nearestnode_to_riv
+            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv
 
         found_head_node_on_riv = False
         for rivpt, node in nearestnode_to_riv.items():
