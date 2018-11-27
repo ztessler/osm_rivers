@@ -681,8 +681,10 @@ def remap_riv_network(source, target, env):
             for j, i in zip(rowidx, colidx):
                 # walk new line, setup prev, next, and nearest dicts
                 if (downj is not None) and (downi is not None):
-                    prev_rivpt[downj,downi].append((j, i))
-                    next_rivpt[j,i].append((downj, downi))
+                    if (j,i) not in prev_rivpt[downj,downi]:
+                        prev_rivpt[downj,downi].append((j, i))
+                    if (downj,downi) not in next_rivpt[j,i]:
+                        next_rivpt[j,i].append((downj, downi))
                     xy = affine * (j, i)
                     allbasinmask = [1 for pos in positions]
                     nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
@@ -837,7 +839,16 @@ def remap_riv_network(source, target, env):
     prev_rivpt = defaultdict(list)
     maxsegi = cursegi
     while tovisit:
-        j, i, cursegi = tovisit.pop()
+        j, i, cursegi = tovisit.pop(0)
+        # check if we're starting along an already traveled branch (could happend with bifur -> convergence)
+        if ((rivers[j,i] == 2) and # on regular river point
+                (len(segments[cursegi])==1) and # first point is bifur, so check if this is second
+                np.any([(j,i) in seg for seg in segments.values()])): # if point is on another segment
+            # ignore this branch, already traveled
+            earlier = np.where([(j,i) in seg for seg in segments.values()])[0].squeeze()
+            print('Deleting segment {0}, already seen in segment(s) {1}'.format(cursegi, earlier))
+            del segments[cursegi]
+            continue
         segments[cursegi].append((j,i))
         if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
             segpts = segments[cursegi]
@@ -858,13 +869,17 @@ def remap_riv_network(source, target, env):
                 if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .03) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.03) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
                     for thisji, nextji in zip(segpts[:-1], segpts[1:]):
-                        next_rivpt[thisji].append(nextji)
-                        prev_rivpt[nextji].append(thisji)
+                        if nextji not in next_rivpt[thisji]:
+                            next_rivpt[thisji].append(nextji)
+                        if thisji not in prev_rivpt[nextji]:
+                            prev_rivpt[nextji].append(thisji)
                 else: # upstream
                     print(cursegi, segpts[0], segpts[-1], dir_metric, 'upstream')
                     for thisji, nextji in zip(segpts[1:], segpts[:-1]):
-                        next_rivpt[thisji].append(nextji)
-                        prev_rivpt[nextji].append(thisji)
+                        if nextji not in next_rivpt[thisji]:
+                            next_rivpt[thisji].append(nextji)
+                        if thisji not in prev_rivpt[nextji]:
+                            prev_rivpt[nextji].append(thisji)
 
         visited.add((j,i))
         for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
@@ -872,12 +887,14 @@ def remap_riv_network(source, target, env):
                     continue
                 j2 = j + dj
                 i2 = i + di
-                if rivers[j2,i2]>0 and (j2, i2) not in visited:
+                if (rivers[j2,i2]>0) and ((j2, i2) not in segments[cursegi]) and (((j2,i2) not in visited) or rivers[j2,i2]==3): # dont go to a point already on segment, or one already visited on another segment (but you can repeat if its a bifur point - convergences can be repeated)
                     if rivers[j,i] == 3: # bifur point
                         maxsegi += 1 # each branch gets new cursegi
-                        cursegi = maxsegi
-                        segments[cursegi].append((j,i)) # add bifur point to new segment
-                    tovisit.append((j2, i2, cursegi))
+                        nextsegi = maxsegi
+                        segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
+                        tovisit.append((j2, i2, nextsegi)) # add new segments to end of queue
+                    else:
+                        tovisit.insert(0, (j2, i2, cursegi)) # on current segment, add to front of queue to stay on this branch
                     if rivers[j,i] == 2:
                         # regular path, not bifur, only one neighbor. break so as not to find incorrect diag branch
                         break
@@ -890,14 +907,18 @@ def remap_riv_network(source, target, env):
     seglens = {}
     for segi, segment in segments.items():
         seglens[segi] = len({nearestnode_to_riv[pt] for pt in segment})
-    goodsegs = {segi: ((seglens[segi] > 2) or (seg[0] in upstream_endpoints)  or (seg[-1] in upstream_endpoints)) for segi, seg in segments.items()}
-    count = 0
+    goodsegs = {segi: ((seglens[segi] > 2) or (seg[0] in upstream_endpoints) or (seg[-1] in upstream_endpoints)) for segi, seg in segments.items()}
     # set direction of small segments to match longest neighboring segment that flows INTO segment
     # track "good" (long or fixed) segments, iterate until all good
+    prevsegs = None
     while not np.all(list(goodsegs.values())):
-        count += 1
-        if count > 100:
+        if goodsegs == prevsegs:
+            with open(str(target[3]), 'wb') as fout:
+                pickle.dump(segments, fout)
+            with open(str(target[4]), 'wb') as fout:
+                pickle.dump(next_rivpt, fout)
             raise NotImplementedError('Flow direction can not be determined for some segments. Goodsegs: {}'.format(str(goodsegs)))
+        prevsegs = goodsegs
 
         for segi, segment in segments.items():
             if not goodsegs[segi]:
@@ -942,11 +963,13 @@ def remap_riv_network(source, target, env):
                 for i, (thisji, nextji) in enumerate(pairs):
                     # dont just overwrite. bifur points need multiple next_rivpts, dont want to lose other branch
                     if i==0:
-                        next_rivpt[thisji].append(nextji)
+                        if nextji not in next_rivpt[thisji]:
+                            next_rivpt[thisji].append(nextji)
                     else:
                         next_rivpt[thisji] = [nextji]
                     if i==(len(list(pairs)) - 1):
-                        prev_rivpt[nextji].append(thisji)
+                        if thisji not in prev_rivpt[nextji]:
+                            prev_rivpt[nextji].append(thisji)
                     else:
                         prev_rivpt[nextji] = [thisji]
                 goodsegs[segi] = True
