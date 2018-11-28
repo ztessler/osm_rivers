@@ -547,7 +547,7 @@ def remap_riv_network(source, target, env):
 
         def _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions):
             # draw new river in straight line from closest river approach to head_node
-            head_node_ji = head_node_ij[::-1]
+            head_node_ji = tuple(head_node_ij[::-1])
             rowidx, colidx = skimage.draw.line(*mindist_rivpt, *head_node_ji)
             if (rowidx[-1] == mindist_rivpt[0]) and (colidx[-1] == mindist_rivpt[0]):
                 # reverse so we walk through from rivpt toward node (upstream)
@@ -563,7 +563,7 @@ def remap_riv_network(source, target, env):
                         prev_rivpt[downj,downi].append((j, i))
                     if (downj,downi) not in next_rivpt[j,i]:
                         next_rivpt[j,i].append((downj, downi))
-                    xy = affine * (j, i)
+                    xy = affine * (i, j)
                     allbasinmask = [1 for pos in positions]
                     nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
                     nearestnode_to_riv[j, i] = nodes[nearest_node_i]
@@ -587,10 +587,11 @@ def remap_riv_network(source, target, env):
                 found_head_node_on_riv = True
                 break
         if found_head_node_on_riv:
-            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
+            if rivpt not in initial_riv_pts:
+                rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
             return rivers, rivpt, initial_riv_pts, node, next_rivpt, prev_rivpt, nearestnode_to_riv
         else:
-            to_visit = initial_riv_pts
+            to_visit = initial_riv_pts.copy()
             head_node_xy = positions[head_node_i]
             head_node_x, head_node_y = positions[head_node_i]
             head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
@@ -604,12 +605,10 @@ def remap_riv_network(source, target, env):
                     mindist = dist
                     mindist_rivpt = rivpt
                 to_visit.extend(next_rivpt[rivpt])
-            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, mindist_rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
+            if mindist_rivpt not in initial_riv_pts:
+                rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, mindist_rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
             rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions)
-
-            raise NotImplementedError('Redrawing osm river path to connect with upstream mainstem. Code SHOULD be correct, but hasnt been tested on a real network')
-
-            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt
+            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv
 
 
     G = nx.read_yaml(str(source[0]))
