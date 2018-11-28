@@ -205,19 +205,20 @@ env.Command(
 
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
+extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(delta))
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
 riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(domain, delta, STNres))
 flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
 b = env.Command(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
-        target=[bifurs, bifurnetwork, bifuroutlets, riversegments, flowdir],
+        target=[bifurs, bifurnetwork, extended_bifurgrid, bifuroutlets, riversegments, flowdir],
         action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
 env.Default(b)
 
 for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:
     for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
         p = myCommand(
-                source=[networkversion, bifur_grid],
+                source=[networkversion, bifur_grid, extended_bifurgrid],
                 target=os.path.join(domainfigures, '{0}_{1}_{2}_{3}map{4}.png'.format(domain, delta, STNres, network_name, label_name)),
                 action=[lib.plot_network_map,
                         'convert -trim $TARGET $TARGET'],
@@ -225,7 +226,7 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
                 inspect=INSPECTfig)
         env.Default(p)
 p = myCommand(
-        source=[bifur_grid, riversegments, flowdir],
+        source=[bifur_grid, extended_bifurgrid, riversegments, flowdir],
         target=os.path.join(domainfigures, '{0}_{1}_{2}_river_flowdirs.png'.format(domain, delta, STNres)),
         action=[lib.plot_flowdirs_map,
                 'convert -trim $TARGET $TARGET'],

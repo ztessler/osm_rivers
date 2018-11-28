@@ -405,6 +405,8 @@ def plot_network_map(source, target, env):
     with rasterio.open(str(source[1]), 'r') as rast:
         bifurs = rast.read(1)
         affine = rast.transform
+    with rasterio.open(str(source[2]), 'r') as rast:
+        extended_bifurs = rast.read(1)
     labeltype = env['labels']
 
     # reset upstream counts
@@ -443,10 +445,14 @@ def plot_network_map(source, target, env):
     X = xs.reshape(I.shape)
     Y = ys.reshape(J.shape)
 
+    ext_bifurs_mask = np.ma.masked_equal(extended_bifurs, 0)
+    ax.pcolormesh(X, Y, ext_bifurs_mask, cmap=mpl.cm.Blues)
+
     bifurs_mask = np.ma.masked_equal(bifurs, 0)
     ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
     ax.axis([X.min(), X.max(), Y.min(), Y.max()])
     ax.set_aspect('equal')
+
 
     ax.xaxis.set_ticks([])
     ax.yaxis.set_ticks([])
@@ -462,10 +468,13 @@ def plot_flowdirs_map(source, target, env):
         bifurs = rast.read(1)
         affine = rast.transform
 
-    with open(str(source[1]), 'rb') as fin:
-        segments = pickle.load(fin)
+    with rasterio.open(str(source[1]), 'r') as rast:
+        extended_bifurs = rast.read(1)
 
     with open(str(source[2]), 'rb') as fin:
+        segments = pickle.load(fin)
+
+    with open(str(source[3]), 'rb') as fin:
         next_rivpts = pickle.load(fin)
 
     mpl.style.use('ggplot')
@@ -489,6 +498,9 @@ def plot_flowdirs_map(source, target, env):
     xs, ys = affine * (I.flatten(), J.flatten())
     X = xs.reshape(I.shape)
     Y = ys.reshape(J.shape)
+
+    ext_bifurs_mask = np.ma.masked_equal(extended_bifurs, 0)
+    ax.pcolormesh(X, Y, ext_bifurs_mask, cmap=mpl.cm.Blues)
 
     bifurs_mask = np.ma.masked_equal(bifurs, 0)
     ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
@@ -616,6 +628,7 @@ def remap_riv_network(source, target, env):
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
+        meta = rast.meta.copy()
     with rasterio.open(str(source[2]), 'r') as rast:
         basins = rast.read(1)
 
@@ -1030,13 +1043,16 @@ def remap_riv_network(source, target, env):
         G.node[node]['downstream'] = len(nx.descendants(G, node))
     nx.write_yaml(G, str(target[1]))
 
-    with open(str(target[2]), 'w') as fout:
+    with rasterio.open(str(target[2]), 'w', **meta) as rast:
+        rast.write(rivers, 1)
+
+    with open(str(target[3]), 'w') as fout:
         for outlet in sorted(outlets):
             fout.write(str(outlet)+'\n')
 
-    with open(str(target[3]), 'wb') as fout:
-        pickle.dump(segments, fout)
     with open(str(target[4]), 'wb') as fout:
+        pickle.dump(segments, fout)
+    with open(str(target[5]), 'wb') as fout:
         pickle.dump(next_rivpt, fout)
 
     return 0
