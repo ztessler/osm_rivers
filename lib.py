@@ -632,6 +632,8 @@ def remap_riv_network(source, target, env):
     with rasterio.open(str(source[2]), 'r') as rast:
         basins = rast.read(1)
 
+    flowdir_weights = env.get('flowdir_weights', (1,2))
+
     nodes = [node for node in G.nodes()]
     positions = [G.node[node]['xy'] for node in nodes]
     nupstream = [G.node[node]['upstream'] for node in nodes]
@@ -741,7 +743,7 @@ def remap_riv_network(source, target, env):
             segpts = segments[cursegi]
             if len(segpts) > 1: # at end of segment
                 # use both ndownstream metric (which uses initial non-bifur network), and dist-to-coast by summimg them. double weight on dist_to_coast. both individually have problems
-                nodescores = [nearestnode_ndownstream[pt] + 2*dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
+                nodescores = [flowdir_weights[0]*nearestnode_ndownstream[pt] + flowdir_weights[1]*dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
                 n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
 
                 diffscores = np.diff(nodescores).tolist()
@@ -750,6 +752,8 @@ def remap_riv_network(source, target, env):
                 diffscores = np.array(diffscores)
                 diffscores[diffscores<0] = -1
                 diffscores[diffscores>0] = 1
+                if len(diffscores) == 0:
+                    diffscores = [0]
                 dir_metric = np.mean(diffscores) # collapse to 0,1 to remove influence of a few outlier nodes
                 # mark next riv pts
                 if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .03) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.03) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
