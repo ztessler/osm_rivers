@@ -79,6 +79,14 @@ def clip_osm_rivers(source, target, env):
     return 0
 
 
+def filter_waterway_types(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+    rivers = rivers[rivers['fclass'] == 'river']
+
+    rivers.to_file(str(target[0]))
+    return 0
+
+
 def thin_vec(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
 
