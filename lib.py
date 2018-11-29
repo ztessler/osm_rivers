@@ -87,6 +87,23 @@ def filter_waterway_types(source, target, env):
     return 0
 
 
+def get_river_widths(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+    rivers = rivers[rivers['fclass'] == 'river']
+
+    # estimate width of each segment using area=w*l, perimeter=2w+2l, solve with quadratic formula
+    simplified = rivers['geometry'].simplify(0.001)
+    a = simplified.area
+    p = simplified.boundary.length
+    #x1 = (a + np.sqrt(p**2 - 16*a)) / 4 # larger, will be length
+    width = (a - np.sqrt(p**2 - 16*a)) / 4 # smaller, will be width
+    #= rivers[rivers['width'] > 0]
+    rivers['width_est'] = width
+    #rivers = rivers[width > 100]
+
+    rivers.to_file(str(target[0]))
+    return 0
+
 def thin_vec(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
 
