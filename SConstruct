@@ -90,12 +90,21 @@ myCommand(
 
 p = myCommand(
         source=clipped_vec,
+        target=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
+        action=[lib.plot_vec_rivs,
+                'convert -trim $TARGET $TARGET'])
+env.Default(p)
+p = myCommand(
+        source=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
         target=os.path.join(deltafigures, '{}_vec_rivs.png'.format(delta)),
+        action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
+
 p = myCommand(
         source=clipped_ww_vec,
         target=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
-                'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
+                'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
         source=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
