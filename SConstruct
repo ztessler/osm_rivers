@@ -53,6 +53,7 @@ domainfigures = os.path.join('figures', domain, delta, STNres)
 
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
 OSMshps = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
+OSMwaterways = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_waterways_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 
 thumbnail_size = 300
@@ -64,8 +65,14 @@ if len(OSMshps) > 1:
             source=OSMshps,
             target=merged_shps,
             action='ogrmerge.py -single -o $TARGET $SOURCES')
+    merged_waterways = os.path.join(domain_nores_work, 'merged_waterways.shp')
+    env.Command(
+            source=OSMwaterways,
+            target=merged_waterways,
+            action='ogrmerge.py -single -o $TARGET $SOURCES')
 else:
     merged_shps = OSMshps[0]
+    merged_waterways = OSMwaterways[0]
 
 # project and clip river vectors to delta
 clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
@@ -74,17 +81,45 @@ myCommand(
         source=[merged_shps, deltashp],
         target=[clipped_vec, proj4str],
         action=lib.project_and_clip_osm_rivers)
+clipped_ww_vec = os.path.join(deltawork, '{0}_ww_clipped/{0}_ww_clipped.shp'.format(delta))
+ww_proj4str = os.path.join(deltawork, '{}_ww_proj4.txt'.format(delta))
+myCommand(
+        source=[merged_waterways, deltashp],
+        target=[clipped_ww_vec, ww_proj4str],
+        action=lib.project_and_clip_osm_waterways)
+
 p = myCommand(
         source=clipped_vec,
         target=os.path.join(deltafigures, '{}_vec_rivs.png'.format(delta)),
+p = myCommand(
+        source=clipped_ww_vec,
+        target=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
 env.Default(p)
 p = myCommand(
-        source=clipped_vec,
-        target=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
-        action=lib.plot_vec_rivs)
+        source=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_ww_vec_rivs.png'.format(delta)),
+        action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
+
+filtered_ww_vec = os.path.join(deltawork, '{0}_ww_filtered/{0}_ww_filtered.shp'.format(delta))
+myCommand(
+        source=clipped_ww_vec,
+        target=filtered_ww_vec,
+        action=lib.filter_waterway_types)
+p = myCommand(
+        source=filtered_ww_vec,
+        target=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs_full.png'.format(delta)),
+        action=[lib.plot_vec_rivs,
+                'convert -trim $TARGET $TARGET'])
+env.Default(p)
+p = myCommand(
+        source=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs.png'.format(delta)),
+        action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
+
 
 thinned_vec = os.path.join(deltawork, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 myCommand(

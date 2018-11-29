@@ -39,6 +39,32 @@ def project_and_clip_osm_rivers(source, target, env):
     return 0
 
 
+def project_and_clip_osm_waterways(source, target, env):
+    rivers_ll = geopandas.read_file(str(source[0]))
+    delta_ll = geopandas.read_file(str(source[1]))
+
+    deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'])
+    deltahull_ll.crs = delta_ll.crs
+    lon0, lat0 = np.array(deltahull_ll.centroid.squeeze())
+
+    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
+                                          central_latitude = lat0)
+
+    rivers = rivers_ll.to_crs(laea.proj4_params)
+    delta = delta_ll.to_crs(laea.proj4_params)
+    deltahull = deltahull_ll.to_crs(laea.proj4_params)
+    deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
+
+    rivgeom = rivers['geometry']
+    inside = rivgeom.intersects(deltahull['geometry'].item())
+    rivers_clip = rivers[inside]
+
+    rivers_clip.to_file(str(target[0]))
+    with open(str(target[1]), 'w') as fout:
+        fout.write(laea.proj4_init + '\n')
+    return 0
+
+
 def clip_osm_rivers(source, target, env):
     rivers_ll = geopandas.read_file(str(source[0]))
     delta_ll = geopandas.read_file(str(source[1]))
