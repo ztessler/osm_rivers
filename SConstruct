@@ -47,7 +47,7 @@ INSPECTfig = os.environ.get('INSPECTfig', None)
 deltawork = os.path.join('work', delta) # SSEA domain can reuse some single-domain files
 domainwork = os.path.join('work', domain, delta, STNres)
 domain_nores_work = os.path.join('work', domain, delta)
-output = os.path.join('output', domain, STNres)
+output = os.path.join('output', domain, delta, STNres)
 deltafigures = os.path.join('figures', delta)
 domainfigures = os.path.join('figures', domain, delta, STNres)
 
