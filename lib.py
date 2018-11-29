@@ -114,7 +114,7 @@ def plot_vec_rivs(source, target, env):
 
     rivers = geopandas.read_file(str(source[0]))
 
-    fig, ax = plt.subplots(1, 1, figsize=(8,6))
+    fig, ax = plt.subplots(1, 1, figsize=(10,10))
     ax.set_facecolor('w')
     rivers.plot(color='k', ax=ax)
     ax.set_aspect('equal')
