@@ -58,6 +58,12 @@ deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(d
 
 thumbnail_size = 300
 
+
+params = {
+        'Mekong': {'wetlands': True, 'thinning': 100, 'minarea': 0, 'minlen': 40, 'flowdir_weights': (1,2)},
+        'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 10000, 'minlen': 80, 'flowdir_weights': (5,1)},
+        }
+
 # merge multiple country-level data if necessary
 if len(OSMshps) > 1:
     merged_shps = os.path.join(domain_nores_work, 'merged_rivs.shp')
@@ -135,7 +141,9 @@ myCommand(
         source=clipped_vec,
         target=thinned_vec,
         action=lib.thin_vec,
-        thresh=100)
+        wetlands=params[delta]['wetlands'],
+        thinning=params[delta]['thinning'],
+        minarea=params[delta]['minarea'])
 p = myCommand(
         source=thinned_vec,
         target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
@@ -195,7 +203,7 @@ myCommand(
         source=bifur_precleaned,
         target=riv_clean,
         action=lib.trim_short_rivs,
-        minlen=40)
+        minlen=params[delta]['minlen'])
 p = env.Command(
         source=riv_clean,
         target=os.path.join(deltafigures, '{}_riv_clean.3.png').format(delta),
@@ -253,10 +261,11 @@ extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(de
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
 riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(domain, delta, STNres))
 flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
-b = env.Command(
+b = myCommand(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
         target=[bifurs, bifurnetwork, extended_bifurgrid, bifuroutlets, riversegments, flowdir],
-        action=lib.remap_riv_network) # more complete remapping of network to match osm rivers
+        action=lib.remap_riv_network,
+        flowdir_weights=params[delta]['flowdir_weights']) # more complete remapping of network to match osm rivers
 env.Default(b)
 
 for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:

@@ -80,11 +80,21 @@ def clip_osm_rivers(source, target, env):
 
 def thin_vec(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
-    thresh = env.get('thresh', 100)
 
-    rivers_eroded = rivers.buffer(-thresh)
-    rivers_clean = rivers_eroded[rivers_eroded.area>0].buffer(thresh)
+    if not env.get('wetlands', True):
+        # keep unspecified, reservoirs, and rivers and river classes. lakes are often unspec.
+        rivers = rivers[(rivers['code']==8200) | (rivers['code']==8201) | (rivers['code']==8202)]
+    # drop small area stuff
+    minarea = env.get('minarea', 0)
+    rivers = rivers[rivers.area > minarea]
+
+    # drop thin stuff
+    thinning = env.get('thinning', 100)
+    rivers_eroded = rivers.buffer(-thinning)
+    rivers_clean = rivers_eroded[rivers_eroded.area>0].buffer(thinning)
+
     rivers_merge = geopandas.overlay(geopandas.GeoDataFrame(rivers_clean, columns=['geometry']), geopandas.GeoDataFrame(rivers_clean, columns=['geometry']), how='union')
+    rivers_merge.crs = rivers.crs
 
     rivers_merge.to_file(str(target[0]))
     return 0
