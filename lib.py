@@ -30,6 +30,7 @@ def project_and_clip_osm_rivers(source, target, env):
     rivers = rivers_ll.to_crs(laea.proj4_params)
     delta = delta_ll.to_crs(laea.proj4_params)
     deltahull = deltahull_ll.to_crs(laea.proj4_params)
+    deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
 
     rivers_clip = geopandas.overlay(rivers, deltahull, how='intersection') #slow
 
