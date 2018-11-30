@@ -70,12 +70,12 @@ if len(OSMshps) > 1:
     env.Command(
             source=OSMshps,
             target=merged_shps,
-            action='ogrmerge.py -single -o $TARGET $SOURCES')
+            action='ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET $SOURCES')
     merged_waterways = os.path.join(domain_nores_work, 'merged_waterways.shp')
     env.Command(
             source=OSMwaterways,
             target=merged_waterways,
-            action='ogrmerge.py -single -o $TARGET $SOURCES')
+            action='ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET $SOURCES')
 else:
     merged_shps = OSMshps[0]
     merged_waterways = OSMwaterways[0]
