@@ -5,16 +5,18 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import palettable
 import geopandas
+import shapely.geometry as sgeom
 import rasterio
 import rasterio.features as rfeatures
 import cartopy.crs as ccrs
 import networkx as nx
 import skimage.morphology as morph
+import skimage.draw
 from scipy.ndimage.filters import generic_filter
 from netCDF4 import Dataset
 import pyproj
 import itertools
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 def project_and_clip_osm_rivers(source, target, env):
     rivers_ll = geopandas.read_file(str(source[0]))
@@ -30,7 +32,7 @@ def project_and_clip_osm_rivers(source, target, env):
     rivers = rivers_ll.to_crs(laea.proj4_params)
     delta = delta_ll.to_crs(laea.proj4_params)
     deltahull = deltahull_ll.to_crs(laea.proj4_params)
-    deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
+    #deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
 
     rivers_clip = geopandas.overlay(rivers, deltahull, how='intersection') #slow
 
@@ -60,7 +62,7 @@ def project_and_clip_osm_waterways(source, target, env):
     inside = rivgeom.intersects(deltahull['geometry'].item())
     rivers_clip = rivers[inside]
 
-    rivers_clip.to_file(str(target[0]))
+    rivers_clip.to_file(str(target[0]), encoding='utf-8')
     with open(str(target[1]), 'w') as fout:
         fout.write(laea.proj4_init + '\n')
     return 0
@@ -83,7 +85,7 @@ def filter_waterway_types(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     rivers = rivers[rivers['fclass'] == 'river']
 
-    rivers.to_file(str(target[0]))
+    rivers.to_file(str(target[0]), encoding='utf-8')
     return 0
 
 
@@ -116,13 +118,27 @@ def thin_vec(source, target, env):
 
     # drop thin stuff
     thinning = env.get('thinning', 100)
-    rivers_eroded = rivers.buffer(-thinning)
-    rivers_clean = rivers_eroded[rivers_eroded.area>0].buffer(thinning)
+    rivers['geometry'] = rivers.buffer(-thinning).buffer(thinning)
+    rivers = rivers[rivers.area>0]
 
-    rivers_merge = geopandas.overlay(geopandas.GeoDataFrame(rivers_clean, columns=['geometry']), geopandas.GeoDataFrame(rivers_clean, columns=['geometry']), how='union')
-    rivers_merge.crs = rivers.crs
 
-    rivers_merge.to_file(str(target[0]))
+    # fill holes, braided rivers
+    #minhole = env.get('minhole', 0)
+    # just fill all holes. might need to leave large ones...
+    newgeoms = []
+    for i, poly in rivers['geometry'].items():
+        if isinstance(poly, sgeom.MultiPolygon):
+            poly2 = sgeom.MultiPolygon([sgeom.Polygon(p.exterior) for p in poly])
+        else:
+            poly2 = sgeom.Polygon(poly.exterior)
+        newgeoms.append(poly2)
+    #rivers.loc[i, 'geometry'] = poly2
+    rivers['geometry'] = geopandas.GeoSeries(newgeoms, index=rivers.index)
+
+    #rivers_merge = geopandas.overlay(geopandas.GeoDataFrame(rivers, columns=['geometry']), geopandas.GeoDataFrame(rivers, columns=['geometry']), how='union')
+    #rivers_merge.crs = rivers.crs
+
+    rivers.to_file(str(target[0]))
     return 0
 
 
@@ -590,8 +606,248 @@ def _find_nearest_node_i(rivxy, positions, nodemask):
     return np.argmin(score)
 
 
+def find_nearest_nodes_to_riv(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+
+    nodes = [node for node in G.nodes()]
+    positions = [G.node[node]['xy'] for node in nodes]
+    #nupstream = [G.node[node]['upstream'] for node in nodes]
+    #ndownstream = [G.node[node]['downstream'] for node in nodes]
+
+    allbasinmask = [1 for n in nodes]
+
+    nearestnode_to_riv = {}
+    #nearestnode_ndownstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
+    #nearestnode_nupstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
+    wet = np.where(rivers>0)
+    for j, i in zip(*wet):
+        xy = affine * (i,j)
+        nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
+        nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
+        #nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
+        #nearestnode_nupstream[(j,i)] = nupstream[nearest_node_i]
+        # if these are needed, just get with ndownstream[nodes.index(node)]
+
+    with open(str(target[0]), 'w') as fout:
+        pickle.dump(nearestnode_to_riv, fout)
+    return 0
+
+
+def calc_dist_to_coast(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    nodes = list(G.nodes())
+
+    coastal = {}
+    # find coastal nodes
+    minj = min([node[0] for node in nodes])
+    maxj = max([node[0] for node in nodes])
+    mini = min([node[1] for node in nodes])
+    maxi = max([node[1] for node in nodes])
+    for node in nodes:
+        if (not (minj < node[0] < maxj) or not (mini < node[1] < maxi)):
+            coastal.append(False)
+            continue
+        foundedge = False
+        for dj in [-1,0,1]:
+            for di in [-1,0,1]:
+                if (dj == di == 0):
+                    continue
+                othernode = (node[0] + dj, node[1] + di)
+                if othernode not in nodes:
+                    foundedge = True
+                    break
+            if foundedge:
+                break
+        coastal[node] = foundedge
+
+    # calc dist-to-coast
+    dist_to_coast = {}
+    for node in nodes:
+        mindist = np.inf
+        for othernode, iscoastal in coastal.item():
+            if not iscoastal:
+                continue
+            dist = np.sqrt((node[0]-othernode[0])**2 + (node[1]-othernode[1])**2)
+            if dist < mindist:
+                mindist = dist
+        dist_to_coast[node] = mindist
+
+    with open(str(target[0]), 'w') as fout:
+        pickle.dump(dist_to_coast, fout)
+    return 0
+
+
+def find_river_segments(source, target, env):
+    with rasterio.open(str(source[0]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+
+    endpoints = np.where(rivers == 1)
+    # just start at the first one. all rivers are connected, so will get everywhere
+
+    (j,i) = endpoints[0][0], endpoints[1][0]
+    cursegi = 0
+    tovisit = [(j,i,cursegi)]
+    visited = set()
+    segments = defaultdict(list)
+    maxsegi = cursegi
+    while tovisit:
+        j, i, cursegi = tovisit.pop(0)
+        # check if we're starting along an already traveled branch (could happend with bifur -> convergence)
+        if ((rivers[j,i] == 2) and # on regular river point
+                (len(segments[cursegi])==1) and # first point is bifur, so check if this is second
+                np.any([(j,i) in seg for seg in segments.values()])): # if point is on another segment
+            # ignore this branch, already traveled
+            earlier = np.where([(j,i) in seg for seg in segments.values()])[0].squeeze()
+            print('Deleting segment {0}, already seen in segment(s) {1}'.format(cursegi, earlier))
+            del segments[cursegi]
+            continue
+
+        segments[cursegi].append((j,i))
+
+        visited.add((j,i))
+        for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
+                if dj == di == 0:
+                    continue
+                j2 = j + dj
+                i2 = i + di
+                if (rivers[j2,i2]>0) and ((j2, i2) not in segments[cursegi]) and (((j2,i2) not in visited) or rivers[j2,i2]==3): # dont go to a point already on segment, or one already visited on another segment (but you can repeat if its a bifur point - convergences can be repeated)
+                    if rivers[j,i] == 3: # bifur point
+                        maxsegi += 1 # each branch gets new cursegi
+                        nextsegi = maxsegi
+                        segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
+                        tovisit.append((j2, i2, nextsegi)) # add new segments to end of queue
+                    else:
+                        tovisit.insert(0, (j2, i2, cursegi)) # on current segment, add to front of queue to stay on this branch
+                    if rivers[j,i] == 2:
+                        # regular path, not bifur, only one neighbor. break so as not to find incorrect diag branch
+                        break
+
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(segments, fout)
+    return 0
+
+
+def set_segment_flowdir(source, target, env):
+    with open(str(source[0]), 'rb') as fin:
+        segments = pickle.load(fin)
+    with rasterio.open(str(source[1])) as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+    waterways = geopandas.read_file(str(source[2]))
+    lines = waterways['geometry']
+
+    #for each segment
+    count = Counter()
+    directed_segments = []
+    #import ipdb;ipdb.set_trace()
+    for segi in sorted(segments):
+        segment = segments[segi]
+        count.clear()
+        # for each point on segment
+        for (j,i) in segment:
+            x, y = affine * (i, j)
+            # find nearest waterway
+            pt = sgeom.Point(x, y)
+            dists = [pt.distance(line) for line in lines]
+            ind = np.argmin(dists)
+            count[ind] += 1/dists[ind] # inverse distance weight so closest points count most
+        # get direction of most common waterway
+        ind = count.most_common(1)[0][0]
+        line = lines.iloc[ind]
+        # check if segment direction is correct or revered
+        # for each verticies from start of line to end
+        j_seg_start, i_seg_start = segment[0]
+        j_seg_end, i_seg_end = segment[-1]
+        x_seg_start, y_seg_start = affine * (i_seg_start, j_seg_start)
+        x_seg_end, y_seg_end = affine * (i_seg_end, j_seg_end)
+        mindist_to_start = np.inf
+        mindist_to_end = np.inf
+        nearest_verti_to_start = None
+        nearest_verti_to_end = None
+        while True: # loop if more verticies are needed to get direction
+            for verti, (x, y) in enumerate(line.coords):
+                # calc dists, track mins, to start and end of segment
+                start_dist = np.sqrt((x - x_seg_start)**2 + (y - y_seg_start)**2)
+                end_dist = np.sqrt((x - x_seg_end)**2 + (y - y_seg_end)**2)
+                if start_dist < mindist_to_start:
+                    mindist_to_start = start_dist
+                    nearest_verti_to_start = verti
+                if end_dist < mindist_to_end:
+                    mindist_to_end = end_dist
+                    nearest_verti_to_end = verti
+            if nearest_verti_to_start < nearest_verti_to_end:
+                # mindist to start comes earlier, then directions match, do nothing
+                directed_segments.append(segment)
+                print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
+                break
+            elif nearest_verti_to_end < nearest_verti_to_start:
+                # mindist to end comes earlier, then swap segment direction
+                directed_segments.append(segment[::-1])
+                print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
+                break
+            else:
+                # single vertex is closest to both start and end. interpolate along line to get more verticies and retry
+                import ipdb;ipdb.set_trace()
+                print('  Segment {0}, need more verticies'.format(segi))
+                newcoords = []
+                for coord, nextcoord in zip(line.coords[:-1], line.coords[1:]):
+                    newcoords.append(coord)
+                    subline = sgeom.LineString([coord, nextcoord])
+                    newcoords.extend([subline.interpolate(frac, normalized=True) for frac in np.linspace(0,1,11)[1:-1]]) # increase segments by 10x
+                newcoords.append(nextcoord)
+                line = sgeom.LineString(newcoords)
+
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(directed_segments, fout)
+
+
+#riv_clean2 = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
+#myCommand(
+        #source=[riv_clean1, segments_1],
+        #target=riv_clean2,
+        #action=lib.remove_small_loops)
+def remove_small_loops(source, target, env):
+    with rasterio.open(str(source[0])) as rast:
+        rivers = rast.read(1)
+        meta = rast.meta
+    with open(str(source[1]), 'rb') as fin:
+        segments = pickle.load(fin)
+    minlen = env.get('minlen', 10)
+
+    for segi, segj in itertools.combinations(segments.keys(), 2):
+        seg1 = segments[segi]
+        seg2 = segments[segj]
+        if (((seg1[0] == seg2[0]) and (seg1[-1] == seg2[-1]) and (seg1 != seg2)) or
+                ((seg1[0] == seg2[-1]) and (seg1[-1] == seg2[0]) and (seg1 != seg2[::-1]))):
+            # parallel paths
+            if (seg1[0] == seg2[0]):
+                samedir = True
+            else:
+                samedir = False
+            if (len(seg1) < minlen) and (len(seg2) < minlen):
+                # both segs short, delete both and replace with straight line
+                for seg in [seg1, seg2]:
+                    for j,i in seg[1:-1]:
+                        rivers[j,i] = 0
+                rowidx, colidx = skimage.draw.line(*seg1[0], *seg1[-1])
+                rivers[rowidx, colidx] = 1
+            elif len(seg1) < minlen:
+                for j,i in seg1[1:-1]:
+                    rivers[j,i] = 0
+            elif len(seg2) < minlen:
+                for j,i in seg2[1:-1]:
+                    rivers[j,i] = 0
+
+    with rasterio.open(str(target[0]), 'w', **meta) as out:
+        out.write(rivers, 1)
+    return 0
+
+
 def remap_riv_network(source, target, env):
-    import skimage.draw
 
     def _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine):
 
@@ -693,6 +949,10 @@ def remap_riv_network(source, target, env):
         meta = rast.meta.copy()
     with rasterio.open(str(source[2]), 'r') as rast:
         basins = rast.read(1)
+    #with open(str(source[2]), 'r') as fin:
+        #nearestnode_to_riv = yaml.load(fin)
+    #with open(str(source[3]), 'r') as fin:
+        #dist_to_coast = yaml.load(fin)
 
     flowdir_weights = env.get('flowdir_weights', (1,2))
 

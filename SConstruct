@@ -60,7 +60,7 @@ thumbnail_size = 300
 
 
 params = {
-        'Mekong': {'wetlands': True, 'thinning': 100, 'minarea': 0, 'minlen': 40, 'flowdir_weights': (1,2)},
+        'Mekong': {'wetlands': False, 'thinning': 100, 'minarea': 0, 'minlen': 40, 'flowdir_weights': (1,2)},
         'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 10000, 'minlen': 80, 'flowdir_weights': (5,1)},
         }
 
@@ -144,6 +144,7 @@ myCommand(
         wetlands=params[delta]['wetlands'],
         thinning=params[delta]['thinning'],
         minarea=params[delta]['minarea'])
+        #minhole=params[delta]['minhole'])
 p = myCommand(
         source=thinned_vec,
         target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
@@ -192,30 +193,50 @@ p = env.Command(
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-bifur_precleaned = os.path.join(deltawork,'{0}_bifurs_precleaned.tif'.format(delta))
+bifur_grid1 = os.path.join(deltawork,'{0}_bifurs.1.tif'.format(delta))
 env.Command(
         source=riv_dropped_small,
-        target=bifur_precleaned,
+        target=bifur_grid1,
         action=lib.find_bifurs)
+
+riv_clean1 = os.path.join(deltawork, '{0}_riv_cleaned.1.tif'.format(delta))
+myCommand(
+        source=bifur_grid1,
+        target=riv_clean1,
+        action=lib.trim_short_rivs,
+        minlen=params[delta]['minlen'])
+
+bifur_grid = os.path.join(deltawork,'{0}_bifurs.2.tif'.format(delta))
+env.Command(
+        source=riv_clean1,
+        target=bifur_grid,
+        action=lib.find_bifurs)
+
+segments_1 = os.path.join(deltawork, 'river_segments.1.pkl')
+myCommand(
+        source=bifur_grid,
+        target=segments_1,
+        action=lib.find_river_segments)
 
 riv_clean = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
-        source=bifur_precleaned,
+        source=[riv_clean1, segments_1],
         target=riv_clean,
-        action=lib.trim_short_rivs,
+        action=lib.remove_small_loops,
         minlen=params[delta]['minlen'])
+#bifur_grid = os.path.join(deltawork, '{0}_bifurs.tif'
+
+segments_2 = os.path.join(deltawork, 'river_segments.2.pkl')
+myCommand(
+        source=[segments_1, bifur_grid, filtered_ww_vec],
+        target=segments_2,
+        action=lib.set_segment_flowdir)
+
 p = env.Command(
         source=riv_clean,
         target=os.path.join(deltafigures, '{}_riv_clean.3.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
-
-bifur_grid = os.path.join(deltawork,'{0}_bifurs.tif'.format(delta))
-env.Command(
-        source=riv_clean,
-        target=bifur_grid,
-        action=lib.find_bifurs)
-
 
 # add record id column to network cell table
 network = os.path.join(domainwork, '{0}_{1}_network.gdbn'.format(domain, STNres))
@@ -255,6 +276,19 @@ env.Command(
         target=[network, networkdelta],
         action=lib.import_rgis_network)
 
+
+nearestnodes_to_riv_1 = os.path.join(domainwork, 'nearestnode_to_riv.1.pkl')
+myCommand(
+        source=[networkdelta, bifur_grid],
+        target=nearestnodes_to_riv_1,
+        action=lib.find_nearest_nodes_to_riv)
+
+node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
+myCommand(
+        source=networkdelta,
+        target=node_dist_to_coast,
+        action=lib.calc_dist_to_coast)
+
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
 extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(delta))
@@ -263,6 +297,7 @@ riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(dom
 flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
 b = myCommand(
         source=[networkdelta, bifur_grid, basins.format(ext='tif')],
+        #source=[networkdelta, bifur_grid, nearestnodes_to_riv_1, node_dist_to_coast],
         target=[bifurs, bifurnetwork, extended_bifurgrid, bifuroutlets, riversegments, flowdir],
         action=lib.remap_riv_network,
         flowdir_weights=params[delta]['flowdir_weights']) # more complete remapping of network to match osm rivers
