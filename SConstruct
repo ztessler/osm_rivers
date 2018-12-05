@@ -212,15 +212,15 @@ env.Command(
         target=bifur_grid2,
         action=lib.find_bifurs)
 
-segments_1 = os.path.join(deltawork, 'river_segments.1.pkl')
+segments1 = os.path.join(deltawork, 'river_segments.1.pkl')
 myCommand(
         source=bifur_grid2,
-        target=segments_1,
+        target=segments1,
         action=lib.find_river_segments)
 
 riv_clean = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
-        source=[riv_clean1, segments_1],
+        source=[riv_clean1, segments1],
         target=riv_clean,
         action=lib.remove_small_loops,
         minlen=params[delta]['minlen'])
@@ -232,23 +232,23 @@ env.Command(
         target=bifur_grid,
         action=lib.find_bifurs)
 
-segments_2 = os.path.join(deltawork, 'river_segments.2.pkl')
+segments2 = os.path.join(deltawork, 'river_segments.2.pkl')
 myCommand(
         source=bifur_grid,
-        target=segments_2,
+        target=segments2,
         action=lib.find_river_segments)
 
 
-segments = os.path.join(deltawork, 'river_segments.pkl')
+segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
 myCommand(
-        source=[segments_2, bifur_grid, filtered_ww_vec],
-        target=segments,
+        source=[segments2, bifur_grid, filtered_ww_vec],
+        target=segments3,
         action=lib.set_segment_flowdir)
 
 next_rivpts = os.path.join(deltawork, 'next_rivpts.pkl')
 prev_rivpts = os.path.join(deltawork, 'prev_rivpts.pkl')
 myCommand(
-        source=segments,
+        source=segments3,
         target=[next_rivpts, prev_rivpts],
         action=lib.next_prev_pts)
 
@@ -287,20 +287,23 @@ for (path, varname) in [(cellid, 'CellID'),
 
 network = os.path.join(domainwork, '{0}_{1}_network.nx.yaml'.format(domain, STNres))
 networkdelta = os.path.join(domainwork, '{0}_{1}_{2}_network_delta.nx.yaml'.format(domain, delta, STNres))
+nupstream = os.path.join(domainwork, 'nupstream.pkl'.format(domain, delta, STNres))
+ndownstream = os.path.join(domainwork, 'ndownstream.pkl'.format(domain, delta, STNres))
+nodepositions = os.path.join(domainwork, 'nodepositions.pkl'.format(domain, delta, STNres))
 env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
                 flowdir.format(ext='tif'),
                 bifur_grid,
                 proj4str],
-        target=[network, networkdelta],
+        target=[network, networkdelta, nupstream, ndownstream, nodepositions],
         action=lib.import_rgis_network)
 
 
-nearestnodes_to_riv_1 = os.path.join(domainwork, 'nearestnode_to_riv.1.pkl')
+nearestnodes1 = os.path.join(domainwork, 'nearestnodes.1.pkl')
 myCommand(
         source=[networkdelta, bifur_grid],
-        target=nearestnodes_to_riv_1,
+        target=nearestnodes1,
         action=lib.find_nearest_nodes_to_riv)
 
 node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
@@ -309,24 +312,77 @@ myCommand(
         target=node_dist_to_coast,
         action=lib.calc_dist_to_coast)
 
+head_rivpt = os.path.join(domainwork, 'head_rivpt.1.pkl')
+myCommand(
+        source=[bifur_grid, nearestnodes1, ndownstream],
+        target=head_rivpt,
+        action=lib.find_head_rivpt)
+
+# final river version, cleaned and merged network. put in domainwork dir since depends on rgis res
+river_adj = os.path.join(domainwork, '{0}_river_adj_to_network.tif'.format(delta))
+myCommand(
+        source=[bifur_grid, head_rivpt, next_rivpts, prev_rivpts, nearestnodes1, nupstream,
+            ndownstream, nodepositions],
+        target=river_adj,
+        action=lib.merge_riv_path_to_mainstem)
+
+bifur_adj = os.path.join(domainwork,'{0}_bifurs.tif'.format(delta))
+env.Command(
+        source=river_adj,
+        target=bifur_adj,
+        action=lib.find_bifurs)
+
+segments4 = os.path.join(domainwork, '{0}_river_segments.4.pkl'.format(delta))
+myCommand(
+        source=bifur_adj,
+        target=segments4,
+        action=lib.find_river_segments)
+
+segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
+myCommand(
+        source=[segments4, bifur_adj, filtered_ww_vec],
+        target=segments,
+        action=lib.set_segment_flowdir)
+
+next_rivpts = os.path.join(domainwork, '{0}_next_rivpts.pkl'.format(delta))
+prev_rivpts = os.path.join(domainwork, '{0}_prev_rivpts.pkl'.format(delta))
+myCommand(
+        source=segments,
+        target=[next_rivpts, prev_rivpts],
+        action=lib.next_prev_pts)
+
+nearestnodes = os.path.join(domainwork, '{0}_nearestnodes.pkl'.format(delta))
+myCommand(
+        source=[networkdelta, bifur_adj],
+        target=nearestnodes,
+        action=lib.find_nearest_nodes_to_riv)
+
+
+head_rivpt = os.path.join(domainwork, '{0}_head_rivpt.pkl'.format(delta))
+myCommand(
+        source=[bifur_adj, nearestnodes, ndownstream],
+        target=head_rivpt,
+        action=lib.find_head_rivpt)
+
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
-extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(delta))
+#extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(delta))
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
-riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(domain, delta, STNres))
-flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
+#riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(domain, delta, STNres))
+#flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
 b = myCommand(
-        source=[networkdelta, bifur_grid, basins.format(ext='tif')],
+        source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
+            node_dist_to_coast],
         #source=[networkdelta, bifur_grid, nearestnodes_to_riv_1, node_dist_to_coast],
-        target=[bifurs, bifurnetwork, extended_bifurgrid, bifuroutlets, riversegments, flowdir],
-        action=lib.remap_riv_network,
-        flowdir_weights=params[delta]['flowdir_weights']) # more complete remapping of network to match osm rivers
+        target=[bifurs, bifurnetwork, bifuroutlets],
+        action=lib.remap_riv_network)
+        #flowdir_weights=params[delta]['flowdir_weights']) # more complete remapping of network to match osm rivers
 env.Default(b)
 
 for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:
     for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
         p = myCommand(
-                source=[networkversion, bifur_grid, extended_bifurgrid],
+                source=[networkversion, bifur_grid, bifur_adj],
                 target=os.path.join(domainfigures, '{0}_{1}_{2}_{3}map{4}.png'.format(domain, delta, STNres, network_name, label_name)),
                 action=[lib.plot_network_map,
                         'convert -trim $TARGET $TARGET'],
@@ -334,7 +390,7 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
                 inspect=INSPECTfig)
         env.Default(p)
 p = myCommand(
-        source=[bifur_grid, segments],
+        source=[bifur_adj, segments],
         target=os.path.join(domainfigures, '{0}_{1}_{2}_river_flowdirs.png'.format(domain, delta, STNres)),
         action=[lib.plot_flowdirs_map,
                 'convert -trim $TARGET $TARGET'],

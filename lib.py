@@ -432,6 +432,16 @@ def import_rgis_network(source, target, env):
         Gclip.node[node]['upstream'] = len(nx.ancestors(G, node)) # use numbers from full network
         Gclip.node[node]['downstream'] = len(nx.descendants(G, node)) # use numbers from full network
     nx.write_yaml(Gclip, str(target[1]))
+
+    upstream = {node: Gclip.node[node]['upstream'] for node in Gclip.nodes()}
+    downstream = {node: Gclip.node[node]['downstream'] for node in Gclip.nodes()}
+    positions = {node: Gclip.node[node]['xy'] for node in Gclip.nodes()}
+    with open(str(target[2]), 'wb') as fout:
+        pickle.dump(upstream, fout)
+    with open(str(target[3]), 'wb') as fout:
+        pickle.dump(downstream, fout)
+    with open(str(target[4]), 'wb') as fout:
+        pickle.dump(positions, fout)
     return 0
 
 
@@ -439,6 +449,9 @@ def find_bifurs(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         rivers = rast.read(1)
         meta = rast.meta.copy()
+
+    # just in case this is run on a bifur_grid
+    rivers[rivers != 0] = 1
 
     # count all neighbor river cells for each river cell
     neighbor_elem = np.array([[1,1,1],
@@ -604,20 +617,20 @@ def find_nearest_nodes_to_riv(source, target, env):
 
     allbasinmask = [1 for n in nodes]
 
-    nearestnode_to_riv = {}
+    nearestnode = {}
     #nearestnode_ndownstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
     #nearestnode_nupstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
     wet = np.where(rivers>0)
     for j, i in zip(*wet):
         xy = affine * (i,j)
         nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
-        nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
+        nearestnode[(j,i)] = nodes[nearest_node_i]
         #nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
         #nearestnode_nupstream[(j,i)] = nupstream[nearest_node_i]
         # if these are needed, just get with ndownstream[nodes.index(node)]
 
-    with open(str(target[0]), 'w') as fout:
-        pickle.dump(nearestnode_to_riv, fout)
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(nearestnode, fout)
     return 0
 
 
@@ -633,7 +646,7 @@ def calc_dist_to_coast(source, target, env):
     maxi = max([node[1] for node in nodes])
     for node in nodes:
         if (not (minj < node[0] < maxj) or not (mini < node[1] < maxi)):
-            coastal.append(False)
+            coastal[node] = False
             continue
         foundedge = False
         for dj in [-1,0,1]:
@@ -652,7 +665,7 @@ def calc_dist_to_coast(source, target, env):
     dist_to_coast = {}
     for node in nodes:
         mindist = np.inf
-        for othernode, iscoastal in coastal.item():
+        for othernode, iscoastal in coastal.items():
             if not iscoastal:
                 continue
             dist = np.sqrt((node[0]-othernode[0])**2 + (node[1]-othernode[1])**2)
@@ -660,7 +673,7 @@ def calc_dist_to_coast(source, target, env):
                 mindist = dist
         dist_to_coast[node] = mindist
 
-    with open(str(target[0]), 'w') as fout:
+    with open(str(target[0]), 'wb') as fout:
         pickle.dump(dist_to_coast, fout)
     return 0
 
@@ -847,17 +860,15 @@ def remove_small_loops(source, target, env):
 def next_prev_pts(source, target, env):
     with open(str(source[0]), 'rb') as fin:
         segments = pickle.load(fin)
-
     next_rivpts = defaultdict(list)
     prev_rivpts = defaultdict(list)
     for segment in segments.values():
         prevj = None
         previ = None
         for thisj, thisi in segment:
-            if prevj == None:
-                continue
-            next_rivpts[prevj, previ].append(thisj, thisi)
-            prev_rivpts[thisj, thisi].append(prevj, previ)
+            if prevj is not None:
+                next_rivpts[prevj, previ].append((thisj, thisi))
+                prev_rivpts[thisj, thisi].append((prevj, previ))
             prevj = thisj
             previ = thisi
 
@@ -868,120 +879,132 @@ def next_prev_pts(source, target, env):
     return 0
 
 
+def find_head_rivpt(source, target, env):
+    with rasterio.open(str(source[0])) as rast:
+        rivers = rast.read(1)
+    with open(str(source[1]), 'rb') as fin:
+        nearestnode = pickle.load(fin)
+    with open(str(source[2]), 'rb') as fin:
+        ndownstream = pickle.load(fin)
+
+    endpoints = np.where(rivers==1)
+    endpoints_ndown = [ndownstream[nearestnode[(j,i)]] for (j,i) in zip(*endpoints)]
+    head_endpoint_i = np.argmax(endpoints_ndown)
+    head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
+
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(head_rivpt, fout)
+    return 0
+
+
+def merge_riv_path_to_mainstem(source, target, env):
+    with rasterio.open(str(source[0])) as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+        meta = rast.meta
+    with open(str(source[1]), 'rb') as fin:
+        head_rivpt = pickle.load(fin)
+    with open(str(source[2]), 'rb') as fin:
+        next_rivpt = pickle.load(fin)
+    with open(str(source[3]), 'rb') as fin:
+        prev_rivpt = pickle.load(fin)
+    with open(str(source[4]), 'rb') as fin:
+        nearestnode = pickle.load(fin)
+    with open(str(source[5]), 'rb') as fin:
+        nupstream = pickle.load(fin)
+    with open(str(source[6]), 'rb') as fin:
+        ndownstream = pickle.load(fin)
+    with open(str(source[7]), 'rb') as fin:
+        positions = pickle.load(fin)
+
+    nodes = sorted(nupstream) # sorting keys of dict
+    nupstream = [nupstream[node] for node in nodes]
+    ndownstream = [ndownstream[node] for node in nodes]
+    positions = [positions[node] for node in nodes]
+
+    def _trim_river(rivers, rivpt, next_rivpt, prev_rivpt):
+        # erase river above rivpt, and adjust next_rivpt and prev_rivpt dicts
+        thispt = rivpt
+        rivers[thispt] = 1
+        to_visit = [(thispt, uppt) for uppt in prev_rivpt[thispt]]
+        while to_visit:
+            downpt, thispt = to_visit.pop()
+            rivers[thispt] = 0
+            if thispt in prev_rivpt:
+                to_visit.extend([(thispt, uppt) for uppt in prev_rivpt[thispt]])
+        return rivers
+
+    def _extend_river(rivers, mindist_rivpt, head_node_ij):
+        # draw new river in straight line from closest river approach to head_node
+        head_node_ji = tuple(head_node_ij[::-1])
+        rowidx, colidx = skimage.draw.line(*mindist_rivpt, *head_node_ji)
+        rivers[rowidx, colidx] = 2
+        rivers[head_node_ji] = 1
+        return rivers
+
+    score = np.array(nupstream) * np.array(ndownstream) # maximized at "center" of mainstem, which we assume is upstream of the delta boundary
+    head_node_i = np.argmax(score)
+    head_node = nodes[head_node_i]
+    nearest = nearestnode[head_rivpt]
+
+    if head_node == nearest:
+        with rasterio.open(str(target[0]), 'w', **meta) as rast:
+            rast.write(rivers, 1)
+        return 0
+
+    found_head_node_on_riv = False
+    for rivpt, node in nearestnode.items():
+        if node == head_node:
+            found_head_node_on_riv = True
+            break
+    if found_head_node_on_riv:
+        rivers = _trim_river(rivers, rivpt, next_rivpt, prev_rivpt)
+    else:
+        to_visit = [head_rivpt]
+        head_node_xy = positions[head_node_i]
+        head_node_x, head_node_y = positions[head_node_i]
+        head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
+        mindist = np.inf
+        while to_visit:
+            rivpt = to_visit.pop()
+            rivj, rivi = rivpt
+            rivx, rivy = affine * (rivi,rivj)
+            dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
+            if dist < mindist:
+                mindist = dist
+                mindist_rivpt = rivpt
+            to_visit.extend(next_rivpt[rivpt])
+        if mindist_rivpt != head_rivpt:
+            rivers = _trim_river(rivers, mindist_rivpt, next_rivpt, prev_rivpt)
+        rivers = _extend_river(rivers, mindist_rivpt, head_node_ij)
+
+    with rasterio.open(str(target[0]), 'w', **meta) as rast:
+        rast.write(rivers, 1)
+    return 0
+
+
 def remap_riv_network(source, target, env):
-
-    def _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine):
-
-        def _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv):
-            # erase river above rivpt, and adjust next_rivpt and prev_rivpt dicts
-            thispt = rivpt
-            rivers[thispt] = 1
-            initial_riv_pts.append(thispt)
-            to_visit = [(thispt, uppt) for uppt in prev_rivpt[thispt]]
-            while to_visit:
-            #while thispt in prev_rivpt:
-                downpt, thispt = to_visit.pop()
-                #downpt = thispt
-                #thispt = prev_rivpt[downpt]
-                rivers[thispt] = 0
-                try:
-                    del prev_rivpt[downpt]
-                except KeyError: # could have already been deleted if on branch upstream of a convergence
-                    pass
-                del next_rivpt[thispt]
-                del nearestnode_to_riv[thispt]
-                if thispt in initial_riv_pts:
-                    initial_riv_pts.remove(thispt)
-                if thispt in prev_rivpt:
-                    to_visit.extend([(thispt, uppt) for uppt in prev_rivpt[thispt]])
-            return rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv
-
-        def _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions):
-            # draw new river in straight line from closest river approach to head_node
-            head_node_ji = tuple(head_node_ij[::-1])
-            rowidx, colidx = skimage.draw.line(*mindist_rivpt, *head_node_ji)
-            if (rowidx[-1] == mindist_rivpt[0]) and (colidx[-1] == mindist_rivpt[0]):
-                # reverse so we walk through from rivpt toward node (upstream)
-                rowidx = rowidx[::-1]
-                colidx = colidx[::-1]
-            rivers[rowidx, colidx] = 2
-            rivers[head_node_ji] = 1
-            downj = None; downi = None
-            for j, i in zip(rowidx, colidx):
-                # walk new line, setup prev, next, and nearest dicts
-                if (downj is not None) and (downi is not None):
-                    if (j,i) not in prev_rivpt[downj,downi]:
-                        prev_rivpt[downj,downi].append((j, i))
-                    if (downj,downi) not in next_rivpt[j,i]:
-                        next_rivpt[j,i].append((downj, downi))
-                    xy = affine * (i, j)
-                    allbasinmask = [1 for pos in positions]
-                    nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
-                    nearestnode_to_riv[j, i] = nodes[nearest_node_i]
-                downj = j
-                downi = i
-            initial_riv_pts.remove(mindist_rivpt)
-            initial_riv_pts.append(head_node_ji)
-            return rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv
-
-        score = np.array(nupstream) * np.array(ndownstream) # maximized at "center" of mainstem, which we assume is upstream of the delta boundary
-        head_node_i = np.argmax(score)
-        head_node = nodes[head_node_i]
-        nearest = nearestnode_to_riv[head_rivpt]
-
-        if head_node == nearest:
-            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv
-
-        found_head_node_on_riv = False
-        for rivpt, node in nearestnode_to_riv.items():
-            if node == head_node:
-                found_head_node_on_riv = True
-                break
-        if found_head_node_on_riv:
-            if rivpt not in initial_riv_pts:
-                rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
-            return rivers, rivpt, initial_riv_pts, node, next_rivpt, prev_rivpt, nearestnode_to_riv
-        else:
-            to_visit = initial_riv_pts.copy()
-            head_node_xy = positions[head_node_i]
-            head_node_x, head_node_y = positions[head_node_i]
-            head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
-            mindist = np.inf
-            while to_visit:
-                rivpt = to_visit.pop()
-                rivj, rivi = rivpt
-                rivx, rivy = affine * (rivi,rivj)
-                dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
-                if dist < mindist:
-                    mindist = dist
-                    mindist_rivpt = rivpt
-                to_visit.extend(next_rivpt[rivpt])
-            if mindist_rivpt not in initial_riv_pts:
-                rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _trim_river(rivers, mindist_rivpt, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv)
-            rivers, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv = _extend_river(rivers, mindist_rivpt, head_node_ij, initial_riv_pts, next_rivpt, prev_rivpt, nearestnode_to_riv, positions)
-            return rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv
-
-
     G = nx.read_yaml(str(source[0]))
     Gorig = G.copy()
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
         meta = rast.meta.copy()
-    with rasterio.open(str(source[2]), 'r') as rast:
-        basins = rast.read(1)
-    #with open(str(source[2]), 'r') as fin:
-        #nearestnode_to_riv = yaml.load(fin)
-    #with open(str(source[3]), 'r') as fin:
-        #dist_to_coast = yaml.load(fin)
-
-    flowdir_weights = env.get('flowdir_weights', (1,2))
+    with open(str(source[2]), 'rb') as fin:
+        head_rivpt = pickle.load(fin)
+    with open(str(source[3]), 'rb') as fin:
+        next_rivpt = pickle.load(fin)
+    with open(str(source[4]), 'rb') as fin:
+        prev_rivpt = pickle.load(fin)
+    with open(str(source[5]), 'rb') as fin:
+        nearestnode = pickle.load(fin)
+    with open(str(source[6]), 'rb') as fin:
+        dist_to_coast = pickle.load(fin)
 
     nodes = [node for node in G.nodes()]
     positions = [G.node[node]['xy'] for node in nodes]
     nupstream = [G.node[node]['upstream'] for node in nodes]
     ndownstream = [G.node[node]['downstream'] for node in nodes]
-    nodebasins = [G.node[node]['basin'] for node in nodes]
     cellid = [G.node[node]['cellid'] for node in nodes]
 
     p0 = positions[0]
@@ -990,237 +1013,17 @@ def remap_riv_network(source, target, env):
     minx, maxy = affine * (0,0)
     maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
 
-    mouthnodei = np.argmax(nupstream)
-    mouthnode = nodes[mouthnodei]
-    mainbasin = basins[mouthnode[1], mouthnode[0]]
-    mainbasinmask = [b == mainbasin for b in nodebasins]
-    allbasinmask = [1 for b in nodebasins]
-
-    nearestnode_to_riv = {}
-    nearestnode_ndownstream = {} # dict on riv points, lower ndownstream means closer to coast. use to assess flow dir on river
-    wet = np.where(rivers>0)
-    for j, i in zip(*wet):
-        xy = affine * (i,j)
-        nearest_node_i = _find_nearest_node_i(xy, positions, allbasinmask)
-        nearestnode_to_riv[(j,i)] = nodes[nearest_node_i]
-        nearestnode_ndownstream[(j,i)] = ndownstream[nearest_node_i]
-
-    endpoints = np.where(rivers==1)
-    endpoints_ndown = [nearestnode_ndownstream[(j,i)] for (j,i) in zip(*endpoints)]
-    ndown_mean = np.mean(endpoints_ndown)
-    ndown_std = np.std(endpoints_ndown)
-    ndown_z = (np.array(endpoints_ndown) - ndown_mean) / ndown_std
-    upstream_endpoints_ind = np.where(ndown_z > 0)
-    upstream_endpoints = [list(zip(*endpoints))[i] for i in upstream_endpoints_ind[0]]
-    head_endpoint_i = np.argmax(ndown_z[upstream_endpoints_ind])
-    head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
-
-    # Find "coastal" nodes by seeing where a node has a missing neighbor
-    # (ignore border nodes since those probably on clipped delta boundary - ok since dist will find a neighbor)
-    coastal = [] # true or false
-    # Use that to calc dist-to-coast for each node
-    dist_to_coast = []
-    # That determines flowdir
-
-    # find coastal nodes
-    minj = min([node[0] for node in nodes])
-    maxj = max([node[0] for node in nodes])
-    mini = min([node[1] for node in nodes])
-    maxi = max([node[1] for node in nodes])
-    for node in nodes:
-        if (not (minj < node[0] < maxj) or not (mini < node[1] < maxi)):
-            coastal.append(False)
-            continue
-        foundedge = False
-        for dj in [-1,0,1]:
-            for di in [-1,0,1]:
-                if (dj == di == 0):
-                    continue
-                othernode = (node[0] + dj, node[1] + di)
-                if othernode not in nodes:
-                    foundedge = True
-                    break
-            if foundedge:
-                break
-        coastal.append(foundedge)
-
-    # calc dist-to-coast
-    for node in nodes:
-        mindist = np.inf
-        for i, iscoastal in enumerate(coastal):
-            if not iscoastal:
-                continue
-            coastalnode = nodes[i]
-            dist = np.sqrt((node[0]-coastalnode[0])**2 + (node[1]-coastalnode[1])**2)
-            if dist < mindist:
-                mindist = dist
-        dist_to_coast.append(mindist)
-
-
-    # Determine flow direction of each river segment. Given branching and convergence, some segs might be ambiguoous
-    # starting from highest endpoint, walk downstream on riv following branches
-    # find segments as all riv points between branches
-    # calc mean(diff([nearestnode_ndownstream(rivpt) for each riv pt in segment in order from bifur point])
-    # if value is positive, it means the branch is mostly moving upstream. set all riv points from bifur point to end to zero (remove river)
-    (j,i) = head_rivpt
-    cursegi = 0
-    tovisit = [(j,i,cursegi)]
-    visited = set()
-    segments = defaultdict(list)
-    next_rivpt = defaultdict(list) # dictionary keyed on rivpt (j,i) indicating next pt flow-dir-wise (will be multiple pts at bifur
-    prev_rivpt = defaultdict(list)
-    maxsegi = cursegi
-    while tovisit:
-        j, i, cursegi = tovisit.pop(0)
-        # check if we're starting along an already traveled branch (could happend with bifur -> convergence)
-        if ((rivers[j,i] == 2) and # on regular river point
-                (len(segments[cursegi])==1) and # first point is bifur, so check if this is second
-                np.any([(j,i) in seg for seg in segments.values()])): # if point is on another segment
-            # ignore this branch, already traveled
-            earlier = np.where([(j,i) in seg for seg in segments.values()])[0].squeeze()
-            print('Deleting segment {0}, already seen in segment(s) {1}'.format(cursegi, earlier))
-            del segments[cursegi]
-            continue
-        segments[cursegi].append((j,i))
-        if rivers[j,i] in [1,3]: # on start/endpoint or bifur point
-            segpts = segments[cursegi]
-            if len(segpts) > 1: # at end of segment
-                # use both ndownstream metric (which uses initial non-bifur network), and dist-to-coast by summimg them. double weight on dist_to_coast. both individually have problems
-                nodescores = [flowdir_weights[0]*nearestnode_ndownstream[pt] + flowdir_weights[1]*dist_to_coast[nodes.index(nearestnode_to_riv[pt])] for pt in segpts]
-                n_nodes_on_seg = len({nearestnode_to_riv[pt] for pt in segpts})
-
-                diffscores = np.diff(nodescores).tolist()
-                while 0 in diffscores:
-                    diffscores.remove(0)
-                diffscores = np.array(diffscores)
-                diffscores[diffscores<0] = -1
-                diffscores[diffscores>0] = 1
-                if len(diffscores) == 0:
-                    diffscores = [0]
-                dir_metric = np.mean(diffscores) # collapse to 0,1 to remove influence of a few outlier nodes
-                # mark next riv pts
-                if ((dir_metric <= 0) or (n_nodes_on_seg <= 1) or ((dir_metric <= .03) and (segpts[0] in upstream_endpoints))) and not ((dir_metric >= -.03) and segpts[-1] in upstream_endpoints): # downstream, and dont set very short segs to upstream, and downstream if segment has upstream endpoint (but if dir_metric is very positive, then ignore upstream_endpoint
-                    print(cursegi, segpts[0], segpts[-1], dir_metric, 'downstream')
-                    for thisji, nextji in zip(segpts[:-1], segpts[1:]):
-                        if nextji not in next_rivpt[thisji]:
-                            next_rivpt[thisji].append(nextji)
-                        if thisji not in prev_rivpt[nextji]:
-                            prev_rivpt[nextji].append(thisji)
-                else: # upstream
-                    print(cursegi, segpts[0], segpts[-1], dir_metric, 'upstream')
-                    for thisji, nextji in zip(segpts[1:], segpts[:-1]):
-                        if nextji not in next_rivpt[thisji]:
-                            next_rivpt[thisji].append(nextji)
-                        if thisji not in prev_rivpt[nextji]:
-                            prev_rivpt[nextji].append(thisji)
-
-        visited.add((j,i))
-        for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
-                if dj == di == 0:
-                    continue
-                j2 = j + dj
-                i2 = i + di
-                if (rivers[j2,i2]>0) and ((j2, i2) not in segments[cursegi]) and (((j2,i2) not in visited) or rivers[j2,i2]==3): # dont go to a point already on segment, or one already visited on another segment (but you can repeat if its a bifur point - convergences can be repeated)
-                    if rivers[j,i] == 3: # bifur point
-                        maxsegi += 1 # each branch gets new cursegi
-                        nextsegi = maxsegi
-                        segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
-                        tovisit.append((j2, i2, nextsegi)) # add new segments to end of queue
-                    else:
-                        tovisit.insert(0, (j2, i2, cursegi)) # on current segment, add to front of queue to stay on this branch
-                    if rivers[j,i] == 2:
-                        # regular path, not bifur, only one neighbor. break so as not to find incorrect diag branch
-                        break
-# by here, next_rivpt gives us flowdirection
-
-    ## Go back over segments: for short segments, use direction of longest neighbor. effectively attaches it
-    # do all first, then another pass to check/change small ones. look at segments that share same endpoints
-    # upstream endpoints marked good
-    #import ipdb;ipdb.set_trace()
-    seglens = {}
-    for segi, segment in segments.items():
-        seglens[segi] = len({nearestnode_to_riv[pt] for pt in segment})
-    goodsegs = {segi: ((seglens[segi] > 2) or (seg[0] in upstream_endpoints) or (seg[-1] in upstream_endpoints)) for segi, seg in segments.items()}
-    # set direction of small segments to match longest neighboring segment that flows INTO segment
-    # track "good" (long or fixed) segments, iterate until all good
-    prevsegs = None
-    while not np.all(list(goodsegs.values())):
-        if goodsegs == prevsegs:
-            with open(str(target[3]), 'wb') as fout:
-                pickle.dump(segments, fout)
-            with open(str(target[4]), 'wb') as fout:
-                pickle.dump(next_rivpt, fout)
-            raise NotImplementedError('Flow direction can not be determined for some segments. Goodsegs: {}'.format(str(goodsegs)))
-        prevsegs = goodsegs
-
-        for segi, segment in segments.items():
-            if not goodsegs[segi]:
-                neighbor_segments = []
-                for segj, otherseg in segments.items():
-                    if otherseg == segment:
-                        continue
-                    if len(otherseg) < 3:
-                        continue
-                    if (((otherseg[0] == segment[0]) and (otherseg[1] in next_rivpt[otherseg[2]])) or
-                        ((otherseg[0] == segment[-1]) and (otherseg[1] in next_rivpt[otherseg[2]])) or
-                        ((otherseg[-1] == segment[0]) and (otherseg[-2] in next_rivpt[otherseg[-3]])) or
-                        ((otherseg[-1] == segment[-1]) and (otherseg[-2] in next_rivpt[otherseg[-3]]))):
-                        # otherseg flows INTO segment
-                        if goodsegs[segj]:
-                            neighbor_segments.append((segj, otherseg))
-                if not neighbor_segments:
-                    continue
-                longest_i = np.argmax([len(seg) for segj, seg in neighbor_segments])
-                segj, otherseg = neighbor_segments[longest_i]
-                # check how segments are aligned, and set segment based on flow dir in otherseg
-                if otherseg[0] == segment[0]:
-                    if otherseg[2] in next_rivpt[otherseg[1]]: # go inside otherseg a bit, endpoint may have been overwritten by this short segment in code above
-                        pairs = zip(segment[1:], segment[:-1])
-                    else:
-                        pairs = zip(segment[:-1], segment[1:])
-                if otherseg[0] == segment[-1]:
-                    if otherseg[2] in next_rivpt[otherseg[1]]:
-                        pairs = zip(segment[:-1], segment[1:])
-                    else:
-                        pairs = zip(segment[1:], segment[:-1])
-                if otherseg[-1] == segment[0]:
-                    if otherseg[-2] in next_rivpt[otherseg[-3]]:
-                        pairs = zip(segment[:-1], segment[1:])
-                    else:
-                        pairs = zip(segment[1:], segment[:-1])
-                if otherseg[-1] == segment[-1]:
-                    if otherseg[-2] in next_rivpt[otherseg[-3]]:
-                        pairs = zip(segment[1:], segment[:-1])
-                    else:
-                        pairs = zip(segment[:-1], segment[1:])
-                for i, (thisji, nextji) in enumerate(pairs):
-                    # dont just overwrite. bifur points need multiple next_rivpts, dont want to lose other branch
-                    if i==0:
-                        if nextji not in next_rivpt[thisji]:
-                            next_rivpt[thisji].append(nextji)
-                    else:
-                        next_rivpt[thisji] = [nextji]
-                    if i==(len(list(pairs)) - 1):
-                        if thisji not in prev_rivpt[nextji]:
-                            prev_rivpt[nextji].append(thisji)
-                    else:
-                        prev_rivpt[nextji] = [thisji]
-                goodsegs[segi] = True
-                print('Fixed direction on segment {0}, matched to segment {1}'.format(segi, segj))
-
-
-
-    initial_riv_pts = [(endpoints[0][endpoint_i], endpoints[1][endpoint_i]) for endpoint_i in upstream_endpoints_ind[0]]
-    # Force river path to start at largest upstream mainstem node.
-    # Trim river so it starts at mainstem, and if necessary extend river to mainstem node
-    # and adjust network data to reflect changes
-    rivers, head_rivpt, initial_riv_pts, head_node, next_rivpt, prev_rivpt, nearestnode_to_riv = _merge_riv_path_to_mainstem(rivers, head_rivpt, initial_riv_pts, nodes, nupstream, ndownstream, positions, nearestnode_to_riv, next_rivpt, prev_rivpt, affine)
+    endpoints = np.where(rivers == 1)
+    upstream_endpoints = []
+    for j,i in zip(*endpoints):
+        if not prev_rivpt[j,i]:
+            upstream_endpoints.append((j,i))
 
     branch = 1
     next_branch = 2
     to_visit = []
-    for riv_pt in initial_riv_pts:
-        node = nearestnode_to_riv[riv_pt]
+    for riv_pt in upstream_endpoints:
+        node = nearestnode[riv_pt]
         node_i = nodes.index(node)
         G.nodes[node]['branches'] = {branch}
         to_visit.append((riv_pt, node_i, branch))
@@ -1238,7 +1041,7 @@ def remap_riv_network(source, target, env):
         last_cell = cellid[last_node_i]
         visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
 
-        next_node = nearestnode_to_riv[(rivj,rivi)]
+        next_node = nearestnode[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
         next_cell = cellid[next_node_i]
 
@@ -1348,7 +1151,7 @@ def remap_riv_network(source, target, env):
                     newbranch = branch # really same branch
                 to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
-            (dist_to_coast[nodes.index(nearestnode_to_riv[rivj,rivi])] <= 3)): # node units
+            (dist_to_coast[nearestnode[rivj,rivi]] <= 3)): # node units
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
             # dont do this for likely upstream points, just leave existing connections
             # helps with errors in osm_river, dont want to strand water upstream
@@ -1390,16 +1193,8 @@ def remap_riv_network(source, target, env):
         G.node[node]['downstream'] = len(nx.descendants(G, node))
     nx.write_yaml(G, str(target[1]))
 
-    with rasterio.open(str(target[2]), 'w', **meta) as rast:
-        rast.write(rivers, 1)
-
-    with open(str(target[3]), 'w') as fout:
+    with open(str(target[2]), 'w') as fout:
         for outlet in sorted(outlets):
             fout.write(str(outlet)+'\n')
-
-    with open(str(target[4]), 'wb') as fout:
-        pickle.dump(segments, fout)
-    with open(str(target[5]), 'wb') as fout:
-        pickle.dump(next_rivpt, fout)
 
     return 0
