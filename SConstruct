@@ -60,8 +60,8 @@ thumbnail_size = 300
 
 
 params = {
-        'Mekong': {'wetlands': False, 'thinning': 100, 'minarea': 0, 'minlen': 40, 'flowdir_weights': (1,2)},
-        'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 10000, 'minlen': 80, 'flowdir_weights': (5,1)},
+        'Mekong': {'wetlands': False, 'thinning': 100, 'minarea': 0, 'minlen': 40},
+        'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 0, 'minlen': 80},
         }
 
 # merge multiple country-level data if necessary
@@ -366,17 +366,12 @@ myCommand(
 
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
 bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
-#extended_bifurgrid = os.path.join(deltawork, '{0}_bifurs_extended.tif'.format(delta))
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
-#riversegments = os.path.join(output, '{0}_{1}_{2}_river_segments.pkl'.format(domain, delta, STNres))
-#flowdir = os.path.join(output, '{0}_{1}_{2}_river_flowdirs.pkl'.format(domain, delta, STNres))
 b = myCommand(
         source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
             node_dist_to_coast],
-        #source=[networkdelta, bifur_grid, nearestnodes_to_riv_1, node_dist_to_coast],
         target=[bifurs, bifurnetwork, bifuroutlets],
         action=lib.remap_riv_network)
-        #flowdir_weights=params[delta]['flowdir_weights']) # more complete remapping of network to match osm rivers
 env.Default(b)
 
 for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:
