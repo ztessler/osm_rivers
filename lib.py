@@ -342,13 +342,13 @@ def trim_short_rivs(source, target, env):
                     todelete.append(segment)
             #if len(segments) == 1, just a stub, gets deleted (other branches are longer, or non-terminating)
             if todelete:
-                if len(todelete) == 2:
+                #if len(todelete) == 2:
                     # two terminating branches
                     # keep longer segment, will get appended to last segment
-                    seglens = [len(segment) for segment in todelete]
-                    longest_i = np.argmax(seglens)
-                    todelete.pop(longest_i)
-                rivers[j,i] -= 1 # old bifur point becomes normal river, or a four-way becomes three-way
+                    #seglens = [len(segment) for segment in todelete]
+                    #longest_i = np.argmax(seglens)
+                    #todelete.pop(longest_i)
+                rivers[j,i] -= len(todelete) # old bifur point becomes normal river, or a four-way becomes three-way
                 for segment in todelete:
                     for rivpt in segment: # bifur point not included on segment
                         rivers[rivpt] = 0
