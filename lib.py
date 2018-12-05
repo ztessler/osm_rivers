@@ -742,7 +742,7 @@ def set_segment_flowdir(source, target, env):
 
     #for each segment
     count = Counter()
-    directed_segments = []
+    directed_segments = {}
     #import ipdb;ipdb.set_trace()
     for segi in sorted(segments):
         segment = segments[segi]
@@ -781,12 +781,12 @@ def set_segment_flowdir(source, target, env):
                     nearest_verti_to_end = verti
             if nearest_verti_to_start < nearest_verti_to_end:
                 # mindist to start comes earlier, then directions match, do nothing
-                directed_segments.append(segment)
+                directed_segments[segi] = segment
                 print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
                 break
             elif nearest_verti_to_end < nearest_verti_to_start:
                 # mindist to end comes earlier, then swap segment direction
-                directed_segments.append(segment[::-1])
+                directed_segments[segi] = segment[::-1]
                 print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
                 break
             else:
@@ -844,6 +844,30 @@ def remove_small_loops(source, target, env):
 
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(rivers, 1)
+    return 0
+
+
+def next_prev_pts(source, target, env):
+    with open(str(source[0]), 'rb') as fin:
+        segments = pickle.load(fin)
+
+    next_rivpts = defaultdict(list)
+    prev_rivpts = defaultdict(list)
+    for segment in segments.values():
+        prevj = None
+        previ = None
+        for thisj, thisi in segment:
+            if prevj == None:
+                continue
+            next_rivpts[prevj, previ].append(thisj, thisi)
+            prev_rivpts[thisj, thisi].append(prevj, previ)
+            prevj = thisj
+            previ = thisi
+
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(next_rivpts, fout)
+    with open(str(target[1]), 'wb') as fout:
+        pickle.dump(prev_rivpts, fout)
     return 0
 
 

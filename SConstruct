@@ -206,15 +206,15 @@ myCommand(
         action=lib.trim_short_rivs,
         minlen=params[delta]['minlen'])
 
-bifur_grid = os.path.join(deltawork,'{0}_bifurs.2.tif'.format(delta))
+bifur_grid2 = os.path.join(deltawork,'{0}_bifurs.2.tif'.format(delta))
 env.Command(
         source=riv_clean1,
-        target=bifur_grid,
+        target=bifur_grid2,
         action=lib.find_bifurs)
 
 segments_1 = os.path.join(deltawork, 'river_segments.1.pkl')
 myCommand(
-        source=bifur_grid,
+        source=bifur_grid2,
         target=segments_1,
         action=lib.find_river_segments)
 
@@ -226,11 +226,31 @@ myCommand(
         minlen=params[delta]['minlen'])
 #bifur_grid = os.path.join(deltawork, '{0}_bifurs.tif'
 
+bifur_grid = os.path.join(deltawork,'{0}_bifurs.tif'.format(delta))
+env.Command(
+        source=riv_clean,
+        target=bifur_grid,
+        action=lib.find_bifurs)
+
 segments_2 = os.path.join(deltawork, 'river_segments.2.pkl')
 myCommand(
-        source=[segments_1, bifur_grid, filtered_ww_vec],
+        source=bifur_grid,
         target=segments_2,
+        action=lib.find_river_segments)
+
+
+segments = os.path.join(deltawork, 'river_segments.pkl')
+myCommand(
+        source=[segments_2, bifur_grid, filtered_ww_vec],
+        target=segments,
         action=lib.set_segment_flowdir)
+
+next_rivpts = os.path.join(deltawork, 'next_rivpts.pkl')
+prev_rivpts = os.path.join(deltawork, 'prev_rivpts.pkl')
+myCommand(
+        source=segments,
+        target=[next_rivpts, prev_rivpts],
+        action=lib.next_prev_pts)
 
 p = env.Command(
         source=riv_clean,
