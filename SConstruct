@@ -334,7 +334,7 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
                 inspect=INSPECTfig)
         env.Default(p)
 p = myCommand(
-        source=[bifur_grid, extended_bifurgrid, riversegments, flowdir],
+        source=[bifur_grid, segments],
         target=os.path.join(domainfigures, '{0}_{1}_{2}_river_flowdirs.png'.format(domain, delta, STNres)),
         action=[lib.plot_flowdirs_map,
                 'convert -trim $TARGET $TARGET'],

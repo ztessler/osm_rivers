@@ -546,14 +546,8 @@ def plot_flowdirs_map(source, target, env):
         bifurs = rast.read(1)
         affine = rast.transform
 
-    with rasterio.open(str(source[1]), 'r') as rast:
-        extended_bifurs = rast.read(1)
-
-    with open(str(source[2]), 'rb') as fin:
+    with open(str(source[1]), 'rb') as fin:
         segments = pickle.load(fin)
-
-    with open(str(source[3]), 'rb') as fin:
-        next_rivpts = pickle.load(fin)
 
     mpl.style.use('ggplot')
     fig, ax = plt.subplots(1,1, figsize=(8, 12))#, dpi=300)
@@ -561,24 +555,15 @@ def plot_flowdirs_map(source, target, env):
     for segi, segment in segments.items():
         x1, y1 = affine * segment[0][::-1]
         x2, y2 = affine * segment[-1][::-1]
-        if segment[1] in next_rivpts[segment[0]]:
-            # flows from 0 to end
-            ax.annotate("", xy=(x2,y2), xytext=(x1,y1),
-                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='-|>'))
-            ax.text((x2+x1)/2, (y2+y1)/2, segi)
-        elif segment[0] in next_rivpts[segment[1]]:
-            # flows from end to 0
-            ax.annotate("", xy=(x1,y1), xytext=(x2,y2),
-                    arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='-|>'))
-            ax.text((x2+x1)/2, (y2+y1)/2, segi)
+        # flows from segment[0] to segment[-1]
+        ax.annotate("", xy=(x2,y2), xytext=(x1,y1),
+                arrowprops=dict(facecolor='k', edgecolor='k', arrowstyle='-|>'))
+        ax.text((x2+x1)/2, (y2+y1)/2, segi)
 
     I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
     xs, ys = affine * (I.flatten(), J.flatten())
     X = xs.reshape(I.shape)
     Y = ys.reshape(J.shape)
-
-    ext_bifurs_mask = np.ma.masked_equal(extended_bifurs, 0)
-    ax.pcolormesh(X, Y, ext_bifurs_mask, cmap=mpl.cm.Blues)
 
     bifurs_mask = np.ma.masked_equal(bifurs, 0)
     ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
@@ -688,34 +673,51 @@ def find_river_segments(source, target, env):
     endpoints = np.where(rivers == 1)
     # just start at the first one. all rivers are connected, so will get everywhere
 
+    branchpoints = set()
+    for j,i in zip(*np.where(rivers==3)):
+        for dj in [-1,0,1]:
+            for di in [-1,0,1]:
+                if dj == di == 0:
+                    continue
+                if rivers[j+dj, i+di] > 0:
+                    branchpoints.add((j+dj,i+di))
+
     (j,i) = endpoints[0][0], endpoints[1][0]
     cursegi = 0
     tovisit = [(j,i,cursegi)]
-    visited = set()
+    onfullsegment = set()
     segments = defaultdict(list)
+    fullsegments = {}
     maxsegi = cursegi
     while tovisit:
         j, i, cursegi = tovisit.pop(0)
-        # check if we're starting along an already traveled branch (could happend with bifur -> convergence)
-        if ((rivers[j,i] == 2) and # on regular river point
-                (len(segments[cursegi])==1) and # first point is bifur, so check if this is second
-                np.any([(j,i) in seg for seg in segments.values()])): # if point is on another segment
-            # ignore this branch, already traveled
-            earlier = np.where([(j,i) in seg for seg in segments.values()])[0].squeeze()
-            print('Deleting segment {0}, already seen in segment(s) {1}'.format(cursegi, earlier))
-            del segments[cursegi]
-            continue
-
         segments[cursegi].append((j,i))
+        if (rivers[j,i] == 3) or ((rivers[j,i] == 1) and (len(segments[cursegi])>1)):
+            # found segment end
+            # mark points on this segment as complete
+            for (_j, _i) in segments[cursegi]:
+                onfullsegment.add((_j,_i))
+            fullsegments[cursegi] = segments[cursegi]
 
-        visited.add((j,i))
         for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
                 if dj == di == 0:
                     continue
                 j2 = j + dj
                 i2 = i + di
-                if (rivers[j2,i2]>0) and ((j2, i2) not in segments[cursegi]) and (((j2,i2) not in visited) or rivers[j2,i2]==3): # dont go to a point already on segment, or one already visited on another segment (but you can repeat if its a bifur point - convergences can be repeated)
-                    if rivers[j,i] == 3: # bifur point
+
+                if rivers[j2,i2] > 0:
+                    if (rivers[j,i]<3) and ((j,i) in branchpoints) and ((j2,i2) in branchpoints):
+                        # don't leap to another branch by accident
+                        continue
+                    if (j2, i2) in segments[cursegi]:
+                        # dont go backwards up river
+                        continue
+                    if (rivers[j2,i2]<3) and ((j2, i2) in onfullsegment):
+                        # point has already been assigned to a full segment (bifurs can be on multiple)
+                        continue
+
+                    # found next river point
+                    if rivers[j,i] == 3: # currently on bifur point
                         maxsegi += 1 # each branch gets new cursegi
                         nextsegi = maxsegi
                         segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
@@ -727,7 +729,7 @@ def find_river_segments(source, target, env):
                         break
 
     with open(str(target[0]), 'wb') as fout:
-        pickle.dump(segments, fout)
+        pickle.dump(fullsegments, fout)
     return 0
 
 
@@ -805,11 +807,6 @@ def set_segment_flowdir(source, target, env):
         pickle.dump(directed_segments, fout)
 
 
-#riv_clean2 = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
-#myCommand(
-        #source=[riv_clean1, segments_1],
-        #target=riv_clean2,
-        #action=lib.remove_small_loops)
 def remove_small_loops(source, target, env):
     with rasterio.open(str(source[0])) as rast:
         rivers = rast.read(1)
