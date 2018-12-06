@@ -1060,10 +1060,8 @@ def remap_riv_network(source, target, env):
     next_branch = 2
     to_visit = []
     for riv_pt in upstream_endpoints:
-        node = nearestnode[riv_pt]
-        node_i = nodes.index(node)
-        G.nodes[node]['branches'] = {branch}
-        to_visit.append((riv_pt, node_i, branch))
+        # dont start on a node, wait to snap to one
+        to_visit.append((riv_pt, None, branch))
         branch = next_branch
         next_branch += 1
 
@@ -1074,9 +1072,13 @@ def remap_riv_network(source, target, env):
     while to_visit:
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
-        last_node = nodes[last_node_i]
-        last_cell = cellid[last_node_i]
-        visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
+        if last_node_i is not None:
+            last_node = nodes[last_node_i]
+            last_cell = cellid[last_node_i]
+            visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
+        else:
+            last_node = None
+            last_cell = None
 
         next_node = nearestnode[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
@@ -1124,11 +1126,12 @@ def remap_riv_network(source, target, env):
                 # this means(or, can happend when?) a new branch backtracks to previous cell
                 # dont want to delete link since that branch should stay. just dont make new link
                 # and branch will continue on elsewhere
-                if not ((next_cell in edits) and
-                        (last_cell in edits[next_cell]) and
-                        (len(edits[next_cell][last_cell].values()) > 0) and
-                        (branch not in edits[next_cell][last_cell]) and
-                        (None not in edits[next_cell][last_cell].values())):
+                if not ((last_node is None) or
+                        ((next_cell in edits) and
+                         (last_cell in edits[next_cell]) and
+                         (len(edits[next_cell][last_cell].values()) > 0) and
+                         (branch not in edits[next_cell][last_cell]) and
+                         (None not in edits[next_cell][last_cell].values()))):
 
                     # create a new link
                     if 'branches' not in G.nodes[next_node]:
