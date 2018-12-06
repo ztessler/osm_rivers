@@ -905,15 +905,29 @@ def next_prev_pts(source, target, env):
 def find_head_rivpt(source, target, env):
     with rasterio.open(str(source[0])) as rast:
         rivers = rast.read(1)
+        affine = rast.transform
     with open(str(source[1]), 'rb') as fin:
         nearestnode = pickle.load(fin)
     with open(str(source[2]), 'rb') as fin:
         ndownstream = pickle.load(fin)
+    with open(str(source[3]), 'rb') as fin:
+        positions = pickle.load(fin)
+
+    maxdown = 0
+    for node, ndown in ndownstream.items():
+        if ndown > maxdown:
+            maxdown = ndown
+            maxdownnode = node
+    nodex, nodey = positions[maxdownnode]
 
     endpoints = np.where(rivers==1)
-    endpoints_ndown = [ndownstream[nearestnode[(j,i)]] for (j,i) in zip(*endpoints)]
-    head_endpoint_i = np.argmax(endpoints_ndown)
-    head_rivpt = (endpoints[0][head_endpoint_i], endpoints[1][head_endpoint_i])
+    mindist = np.inf
+    for (j,i) in zip(*endpoints):
+        x, y = affine * (i, j)
+        dist = np.sqrt((nodex-x)**2 + (nodey-y)**2)
+        if dist < mindist:
+            mindist = dist
+            head_rivpt = (j,i)
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(head_rivpt, fout)

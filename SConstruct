@@ -345,7 +345,7 @@ myCommand(
 
 head_rivpt = os.path.join(domainwork, 'head_rivpt.1.pkl')
 myCommand(
-        source=[bifur_grid, nearestnodes1, ndownstream],
+        source=[bifur_grid, nearestnodes1, ndownstream, nodepositions],
         target=head_rivpt,
         action=lib.find_head_rivpt)
 
@@ -357,7 +357,7 @@ myCommand(
         target=river_adj,
         action=lib.merge_riv_path_to_mainstem)
 
-bifur_adj = os.path.join(domainwork,'{0}_bifurs.tif'.format(delta))
+bifur_adj = os.path.join(domainwork,'{0}_adj_bifurs.tif'.format(delta))
 env.Command(
         source=river_adj,
         target=bifur_adj,
@@ -391,7 +391,7 @@ myCommand(
 
 head_rivpt = os.path.join(domainwork, '{0}_head_rivpt.pkl'.format(delta))
 myCommand(
-        source=[bifur_adj, nearestnodes, ndownstream],
+        source=[bifur_adj, nearestnodes, ndownstream, nodepositions],
         target=head_rivpt,
         action=lib.find_head_rivpt)
 
