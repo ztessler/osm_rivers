@@ -271,7 +271,7 @@ myCommand(
 
 segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
 myCommand(
-        source=[segments2, bifur_grid, rivers_ww_vec],
+        source=[segments2, bifur_grid, clipped_ww_vec],
         target=segments3,
         action=lib.set_segment_flowdir)
 
@@ -370,7 +370,7 @@ myCommand(
 
 segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
 myCommand(
-        source=[segments4, bifur_adj, rivers_ww_vec],
+        source=[segments4, bifur_adj, clipped_ww_vec],
         target=segments,
         action=lib.set_segment_flowdir)
 

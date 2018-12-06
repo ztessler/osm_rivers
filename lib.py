@@ -790,18 +790,22 @@ def set_segment_flowdir(source, target, env):
     #for each segment
     count = Counter()
     directed_segments = {}
-    #import ipdb;ipdb.set_trace()
+    x1, y1 = affine * (rivers.shape[1]//2, rivers.shape[0]//2)
+    x2, y2 = affine * (rivers.shape[1]//2 + 1, rivers.shape[0]//2 + 1)
+    dx = abs(x2-x1)
+    dy = abs(y2-y1)
+    pixelsize = np.sqrt(dx**2 + dy**2)
     for segi in sorted(segments):
         segment = segments[segi]
         count.clear()
         # for each point on segment
         for (j,i) in segment:
-            x, y = affine * (i, j)
+            x, y = affine * (i+.5, j+.5)
             # find nearest waterway
             pt = sgeom.Point(x, y)
             dists = [pt.distance(line) for line in lines]
             ind = np.argmin(dists)
-            count[ind] += 1/dists[ind] # inverse distance weight so closest points count most
+            count[ind] += 1/max(dists[ind], pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
         # get direction of most common waterway
         ind = count.most_common(1)[0][0]
         line = lines.iloc[ind]
