@@ -60,9 +60,8 @@ thumbnail_size = 300
 
 
 params = {
-        'Mekong': {'wetlands': False, 'thinning': 100, 'minwaterway': 30000, 'minarea': 0,
-            'minlen': 40},
-        'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 0, 'minlen': 80},
+        'Mekong': {'wetlands': False, 'thinning': 100, 'minwaterway': 30000, 'minarea': 0, 'minlen': 40},
+        'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40},
         }
 
 # merge multiple country-level data if necessary
