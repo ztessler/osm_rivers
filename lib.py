@@ -1191,7 +1191,7 @@ def remap_riv_network(source, target, env):
                     newbranch = branch # really same branch
                 to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
-            (dist_to_coast[nearestnode[rivj,rivi]] <= 3)): # node units
+            (dist_to_coast[nearestnode[rivj,rivi]] <= 1)): # node units
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
             # dont do this for likely upstream points, just leave existing connections
             # helps with errors in osm_river, dont want to strand water upstream
