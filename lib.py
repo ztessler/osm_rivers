@@ -32,7 +32,7 @@ def project_and_clip_osm_rivers(source, target, env):
     rivers = rivers_ll.to_crs(laea.proj4_params)
     delta = delta_ll.to_crs(laea.proj4_params)
     deltahull = deltahull_ll.to_crs(laea.proj4_params)
-    #deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
+    deltahull = geopandas.GeoDataFrame(deltahull.buffer(50000), columns=['geometry'])
 
     rivers_clip = geopandas.overlay(rivers, deltahull, how='intersection') #slow
 
@@ -56,13 +56,14 @@ def project_and_clip_osm_waterways(source, target, env):
     rivers = rivers_ll.to_crs(laea.proj4_params)
     delta = delta_ll.to_crs(laea.proj4_params)
     deltahull = deltahull_ll.to_crs(laea.proj4_params)
-    deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'])
+    deltahull = geopandas.GeoDataFrame(deltahull.buffer(50000), columns=['geometry'])
 
     rivgeom = rivers['geometry']
-    inside = rivgeom.intersects(deltahull['geometry'].item())
-    rivers_clip = rivers[inside]
+    rivers_clip = rivgeom.intersection(deltahull['geometry'].item())
+    rivers['geometry'] = rivers_clip
+    rivers = rivers[rivers.length > 0]
 
-    rivers_clip.to_file(str(target[0]), encoding='utf-8')
+    rivers.to_file(str(target[0]), encoding='utf-8')
     with open(str(target[1]), 'w') as fout:
         fout.write(laea.proj4_init + '\n')
     return 0
@@ -81,9 +82,19 @@ def clip_osm_rivers(source, target, env):
     return 0
 
 
-def filter_waterway_types(source, target, env):
+def select_waterway_rivers(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     rivers = rivers[rivers['fclass'] == 'river']
+
+    rivers.to_file(str(target[0]), encoding='utf-8')
+    return 0
+
+
+def filter_waterway_rivers(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+
+    minwaterway = env.get('minwaterway', 0)
+    rivers = rivers[~(rivers['name'].isnull()) & (rivers.length > minwaterway)]
 
     rivers.to_file(str(target[0]), encoding='utf-8')
     return 0
@@ -139,6 +150,18 @@ def thin_vec(source, target, env):
     #rivers_merge.crs = rivers.crs
 
     rivers.to_file(str(target[0]))
+    return 0
+
+
+def merge_water_waterway_vecs(source, target, env):
+    water = geopandas.read_file(str(source[0]))
+    waterways = geopandas.read_file(str(source[1]))
+
+    buff = env.get('buff', 100)
+    waterway_polys = geopandas.GeoDataFrame(waterways.buffer(buff), columns=['geometry'], crs=waterways.crs)
+
+    merged = geopandas.overlay(water, waterway_polys, how='union')
+    merged.to_file(str(target[0]))
     return 0
 
 

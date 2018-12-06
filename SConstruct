@@ -60,7 +60,8 @@ thumbnail_size = 300
 
 
 params = {
-        'Mekong': {'wetlands': False, 'thinning': 100, 'minarea': 0, 'minlen': 40},
+        'Mekong': {'wetlands': False, 'thinning': 100, 'minwaterway': 30000, 'minarea': 0,
+            'minlen': 40},
         'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minarea': 0, 'minlen': 80},
         }
 
@@ -118,23 +119,29 @@ p = myCommand(
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-filtered_ww_vec = os.path.join(deltawork, '{0}_ww_filtered/{0}_ww_filtered.shp'.format(delta))
+rivers_ww_vec = os.path.join(deltawork, '{0}_ww_rivers/{0}_ww_rivers.shp'.format(delta))
 myCommand(
         source=clipped_ww_vec,
-        target=filtered_ww_vec,
-        action=lib.filter_waterway_types)
+        target=rivers_ww_vec,
+        action=lib.select_waterway_rivers)
 p = myCommand(
-        source=filtered_ww_vec,
-        target=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs_full.png'.format(delta)),
+        source=rivers_ww_vec,
+        target=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_ww_filtered_vec_rivs.png'.format(delta)),
+        source=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
+filtered_rivers_ww_vec = os.path.join(deltawork,'{0}_filtered_ww_rivers/{0}_filtered_ww_rivers.shp'.format(delta))
+p = myCommand(
+        source=rivers_ww_vec,
+        target=filtered_rivers_ww_vec,
+        action=lib.filter_waterway_rivers,
+        minwaterway=params[delta]['minwaterway'])
 
 thinned_vec = os.path.join(deltawork, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 myCommand(
@@ -147,16 +154,40 @@ myCommand(
         #minhole=params[delta]['minhole'])
 p = myCommand(
         source=thinned_vec,
-        target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_thinned_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
-                'convert -fuzz 40% -trim -trim -resize {0} $TARGET $TARGET'.format(thumbnail_size)])
+                'convert -trim $TARGET $TARGET'])
 env.Default(p)
+p = myCommand(
+        source=os.path.join(deltafigures, '{}_vec_thinned_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
+        action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
+
+merged_vec = os.path.join(deltawork, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
+myCommand(
+        source=[thinned_vec, filtered_rivers_ww_vec],
+        target=merged_vec,
+        action=lib.merge_water_waterway_vecs,
+        buff=params[delta]['thinning'])
+p = myCommand(
+        source=merged_vec,
+        target=os.path.join(deltafigures, '{}_vec_merged_rivs_full.png'.format(delta)),
+        action=[lib.plot_vec_rivs,
+                'convert -trim $TARGET $TARGET'])
+env.Default(p)
+p = myCommand(
+        source=os.path.join(deltafigures, '{}_vec_merged_rivs_full.png'.format(delta)),
+        target=os.path.join(deltafigures, '{}_vec_merged_rivs.png'.format(delta)),
+        action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+env.Default(p)
+
 
 
 # rasterize
 riv_rast = os.path.join(deltawork, '{0}_riv_rast.tif'.format(delta))
 myCommand(
-        source=thinned_vec,
+        source=merged_vec,
         target=riv_rast,
         action=lib.rasterize_riv,
         imsize=1000)
@@ -241,7 +272,7 @@ myCommand(
 
 segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
 myCommand(
-        source=[segments2, bifur_grid, filtered_ww_vec],
+        source=[segments2, bifur_grid, rivers_ww_vec],
         target=segments3,
         action=lib.set_segment_flowdir)
 
@@ -340,7 +371,7 @@ myCommand(
 
 segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
 myCommand(
-        source=[segments4, bifur_adj, filtered_ww_vec],
+        source=[segments4, bifur_adj, rivers_ww_vec],
         target=segments,
         action=lib.set_segment_flowdir)
 
