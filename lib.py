@@ -365,16 +365,25 @@ def trim_short_rivs(source, target, env):
                     todelete.append(segment)
             #if len(segments) == 1, just a stub, gets deleted (other branches are longer, or non-terminating)
             if todelete:
-                #if len(todelete) == 2:
-                    # two terminating branches
-                    # keep longer segment, will get appended to last segment
+                newj = None
+                if ((len(todelete) == 2 and rivers[j,i] == 3) or
+                        (len(todelete) == 3 and rivers[j,i] == 4)):
+                    #two (or three) terminating branches
+                    #replace with single line to average location
+                    ## keep longer segment, will get appended to last segment
                     #seglens = [len(segment) for segment in todelete]
                     #longest_i = np.argmax(seglens)
                     #todelete.pop(longest_i)
+                    newj = int(round(sum([segtodelete[-1][0] for segtodelete in todelete]) / len(todelete)))
+                    newi = int(round(sum([segtodelete[-1][1] for segtodelete in todelete]) / len(todelete)))
                 rivers[j,i] -= len(todelete) # old bifur point becomes normal river, or a four-way becomes three-way
                 for segment in todelete:
                     for rivpt in segment: # bifur point not included on segment
                         rivers[rivpt] = 0
+                if newj is not None:
+                    rowidx, colidx = skimage.draw.line(j, i, newj, newi)
+                    rivers[rowidx, colidx] = 2
+                    rivers[newj, newi] = 1
 
         # run skeleton to clean corners where short segments were clipped off
         # dont want to overwrite bifur info though
