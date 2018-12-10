@@ -668,7 +668,12 @@ def find_nearest_nodes_to_riv(source, target, env):
 
 def calc_dist_to_coast(source, target, env):
     G = nx.read_yaml(str(source[0]))
+    with rasterio.open(str(source[1]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+
     nodes = list(G.nodes())
+    positions = [G.node[node]['xy'] for node in nodes]
 
     coastal = {}
     # find coastal nodes
@@ -693,8 +698,8 @@ def calc_dist_to_coast(source, target, env):
                 break
         coastal[node] = foundedge
 
-    # calc dist-to-coast
-    dist_to_coast = {}
+    # calc node_dist_to_coast
+    node_dist_to_coast = {}
     for node in nodes:
         mindist = np.inf
         for othernode, iscoastal in coastal.items():
@@ -703,10 +708,27 @@ def calc_dist_to_coast(source, target, env):
             dist = np.sqrt((node[0]-othernode[0])**2 + (node[1]-othernode[1])**2)
             if dist < mindist:
                 mindist = dist
-        dist_to_coast[node] = mindist
+        node_dist_to_coast[node] = mindist
+
+    # calc riv_dist_to_coast
+    riv_dist_to_coast = {}
+    wet = np.where(rivers > 0)
+    for j,i in zip(*wet):
+        x, y = affine * (i, j)
+        mindist = np.inf
+        for othernode, iscoastal in coastal.items():
+            if not iscoastal:
+                continue
+            nodex, nodey = positions[nodes.index(othernode)]
+            dist = np.sqrt((nodex-x)**2 + (nodey-y)**2)
+            if dist < mindist:
+                mindist = dist
+        riv_dist_to_coast[j,i] = mindist
 
     with open(str(target[0]), 'wb') as fout:
-        pickle.dump(dist_to_coast, fout)
+        pickle.dump(node_dist_to_coast, fout)
+    with open(str(target[1]), 'wb') as fout:
+        pickle.dump(riv_dist_to_coast, fout)
     return 0
 
 
@@ -785,10 +807,13 @@ def set_segment_flowdir(source, target, env):
         rivers = rast.read(1)
         affine = rast.transform
     waterways = geopandas.read_file(str(source[2]))
+    with open(str(source[3]), 'rb') as fin:
+        riv_dist_to_coast = pickle.load(fin)
     lines = waterways['geometry']
 
     #for each segment
-    count = Counter()
+    counts = Counter()
+    scores = Counter()
     directed_segments = {}
     x1, y1 = affine * (rivers.shape[1]//2, rivers.shape[0]//2)
     x2, y2 = affine * (rivers.shape[1]//2 + 1, rivers.shape[0]//2 + 1)
@@ -797,7 +822,8 @@ def set_segment_flowdir(source, target, env):
     pixelsize = np.sqrt(dx**2 + dy**2)
     for segi in sorted(segments):
         segment = segments[segi]
-        count.clear()
+        counts.clear()
+        scores.clear()
         # for each point on segment
         for (j,i) in segment:
             x, y = affine * (i+.5, j+.5)
@@ -805,55 +831,72 @@ def set_segment_flowdir(source, target, env):
             pt = sgeom.Point(x, y)
             dists = [pt.distance(line) for line in lines]
             ind = np.argmin(dists)
-            count[ind] += 1/max(dists[ind], pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
+            scores[ind] += 1/max(dists[ind], pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
+            counts[ind] += (dists[ind] < (2*pixelsize))
+            #TODO clip distances so that past a certain dist (pixelsize*3??) just add zero. require total score to be 3 of these, if not then use dist_to_coast metric
         # get direction of most common waterway
-        ind = count.most_common(1)[0][0]
-        line = lines.iloc[ind]
-        # check if segment direction is correct or revered
-        # for each verticies from start of line to end
-        j_seg_start, i_seg_start = segment[0]
-        j_seg_end, i_seg_end = segment[-1]
-        x_seg_start, y_seg_start = affine * (i_seg_start, j_seg_start)
-        x_seg_end, y_seg_end = affine * (i_seg_end, j_seg_end)
-        mindist_to_start = np.inf
-        mindist_to_end = np.inf
-        nearest_verti_to_start = None
-        nearest_verti_to_end = None
-        while True: # loop if more verticies are needed to get direction
-            for verti, (x, y) in enumerate(line.coords):
-                # calc dists, track mins, to start and end of segment
-                start_dist = np.sqrt((x - x_seg_start)**2 + (y - y_seg_start)**2)
-                end_dist = np.sqrt((x - x_seg_end)**2 + (y - y_seg_end)**2)
-                if start_dist < mindist_to_start:
-                    mindist_to_start = start_dist
-                    nearest_verti_to_start = verti
-                if end_dist < mindist_to_end:
-                    mindist_to_end = end_dist
-                    nearest_verti_to_end = verti
-            if nearest_verti_to_start < nearest_verti_to_end:
-                # mindist to start comes earlier, then directions match, do nothing
-                directed_segments[segi] = segment
-                print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
-                break
-            elif nearest_verti_to_end < nearest_verti_to_start:
-                # mindist to end comes earlier, then swap segment direction
+        ind, score = scores.most_common(1)[0]
+        count = counts[ind]
+        use_dist_to_coast = False
+        if count >= min(7, len(segments)):
+            # have enough overlap between osm river waterway and segment, use it's direction
+            line = lines.iloc[ind]
+            while True: # loop if more verticies are needed to get direction
+                # check if segment direction is correct or revered
+                # for each verticies from start of line to end
+                j_seg_start, i_seg_start = segment[0]
+                j_seg_end, i_seg_end = segment[-1]
+                x_seg_start, y_seg_start = affine * (i_seg_start, j_seg_start)
+                x_seg_end, y_seg_end = affine * (i_seg_end, j_seg_end)
+                mindist_to_start = np.inf
+                mindist_to_end = np.inf
+                nearest_verti_to_start = None
+                nearest_verti_to_end = None
+                for verti, (x, y) in enumerate(line.coords):
+                    # calc dists, track mins, to start and end of segment
+                    start_dist = np.sqrt((x - x_seg_start)**2 + (y - y_seg_start)**2)
+                    end_dist = np.sqrt((x - x_seg_end)**2 + (y - y_seg_end)**2)
+                    if start_dist < mindist_to_start:
+                        mindist_to_start = start_dist
+                        nearest_verti_to_start = verti
+                    if end_dist < mindist_to_end:
+                        mindist_to_end = end_dist
+                        nearest_verti_to_end = verti
+                if nearest_verti_to_start < nearest_verti_to_end:
+                    # mindist to start comes earlier, then directions match, do nothing
+                    directed_segments[segi] = segment
+                    print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
+                    break
+                elif nearest_verti_to_end < nearest_verti_to_start:
+                    # mindist to end comes earlier, then swap segment direction
+                    directed_segments[segi] = segment[::-1]
+                    print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
+                    break
+                else:
+                    # single vertex is closest to both start and end. interpolate along line to get more verticies and retry
+                    print('  Segment {0}, not enough line/segment overlap, use dist to coast'.format(segi))
+                    #newcoords = []
+                    #for coord, nextcoord in zip(line.coords[:-1], line.coords[1:]):
+                        #newcoords.append(coord)
+                        #subline = sgeom.LineString([coord, nextcoord])
+                        #newcoords.extend([subline.interpolate(frac, normalized=True) for frac in np.linspace(0,1,11)[1:-1]]) # increase segments by 10x
+                    #newcoords.append(nextcoord)
+                    #line = sgeom.LineString(newcoords)
+                    use_dist_to_coast = True
+        if (count < min(7, len(segments))) or use_dist_to_coast:
+            # use dist_to_coast since not enough segment pixels align with an osm waterway
+            if ((riv_dist_to_coast[segment[0]] < riv_dist_to_coast[segment[-1]])): # and
+                    #(riv_dist_to_coast[segment[0]] < 10000) and
+                    #(riv_dist_to_coast[segment[-1]] > 10000)): # replace with node resolution?
                 directed_segments[segi] = segment[::-1]
-                print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
-                break
+                print('Segment {0}: {1} to {2} (reversed (b))'.format(segi, segment[-1], segment[0]))
             else:
-                # single vertex is closest to both start and end. interpolate along line to get more verticies and retry
-                import ipdb;ipdb.set_trace()
-                print('  Segment {0}, need more verticies'.format(segi))
-                newcoords = []
-                for coord, nextcoord in zip(line.coords[:-1], line.coords[1:]):
-                    newcoords.append(coord)
-                    subline = sgeom.LineString([coord, nextcoord])
-                    newcoords.extend([subline.interpolate(frac, normalized=True) for frac in np.linspace(0,1,11)[1:-1]]) # increase segments by 10x
-                newcoords.append(nextcoord)
-                line = sgeom.LineString(newcoords)
+                directed_segments[segi] = segment
+                print('Segment {0}: {1} to {2} (no change (b))'.format(segi, segment[0], segment[-1]))
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(directed_segments, fout)
+    return 0
 
 
 def remove_small_loops(source, target, env):

@@ -269,18 +269,6 @@ myCommand(
         action=lib.find_river_segments)
 
 
-segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
-myCommand(
-        source=[segments2, bifur_grid, clipped_ww_vec],
-        target=segments3,
-        action=lib.set_segment_flowdir)
-
-next_rivpts = os.path.join(deltawork, 'next_rivpts.pkl')
-prev_rivpts = os.path.join(deltawork, 'prev_rivpts.pkl')
-myCommand(
-        source=segments3,
-        target=[next_rivpts, prev_rivpts],
-        action=lib.next_prev_pts)
 
 p = env.Command(
         source=riv_clean,
@@ -337,9 +325,10 @@ myCommand(
         action=lib.find_nearest_nodes_to_riv)
 
 node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
+riv_dist_to_coast = os.path.join(domainwork, 'riv_dist_to_coast.pkl')
 myCommand(
-        source=networkdelta,
-        target=node_dist_to_coast,
+        source=[networkdelta, bifur_grid],
+        target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
 head_rivpt = os.path.join(domainwork, 'head_rivpt.1.pkl')
@@ -347,6 +336,19 @@ myCommand(
         source=[bifur_grid, nearestnodes1, ndownstream, nodepositions],
         target=head_rivpt,
         action=lib.find_head_rivpt)
+
+segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
+myCommand(
+        source=[segments2, bifur_grid, clipped_ww_vec, riv_dist_to_coast],
+        target=segments3,
+        action=lib.set_segment_flowdir)
+
+next_rivpts = os.path.join(deltawork, 'next_rivpts.pkl')
+prev_rivpts = os.path.join(deltawork, 'prev_rivpts.pkl')
+myCommand(
+        source=segments3,
+        target=[next_rivpts, prev_rivpts],
+        action=lib.next_prev_pts)
 
 # final river version, cleaned and merged network. put in domainwork dir since depends on rgis res
 river_adj = os.path.join(domainwork, '{0}_river_adj_to_network.tif'.format(delta))
@@ -362,6 +364,13 @@ env.Command(
         target=bifur_adj,
         action=lib.find_bifurs)
 
+node_dist_to_coast1 = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
+riv_adj_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
+myCommand(
+        source=[networkdelta, bifur_adj],
+        target=[node_dist_to_coast1, riv_adj_dist_to_coast],
+        action=lib.calc_dist_to_coast)
+
 segments4 = os.path.join(domainwork, '{0}_river_segments.4.pkl'.format(delta))
 myCommand(
         source=bifur_adj,
@@ -370,7 +379,7 @@ myCommand(
 
 segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
 myCommand(
-        source=[segments4, bifur_adj, clipped_ww_vec],
+        source=[segments4, bifur_adj, clipped_ww_vec, riv_adj_dist_to_coast],
         target=segments,
         action=lib.set_segment_flowdir)
 
