@@ -841,48 +841,37 @@ def set_segment_flowdir(source, target, env):
         if count >= min(7, len(segments)):
             # have enough overlap between osm river waterway and segment, use it's direction
             line = lines.iloc[ind]
-            while True: # loop if more verticies are needed to get direction
-                # check if segment direction is correct or revered
-                # for each verticies from start of line to end
-                j_seg_start, i_seg_start = segment[0]
-                j_seg_end, i_seg_end = segment[-1]
-                x_seg_start, y_seg_start = affine * (i_seg_start, j_seg_start)
-                x_seg_end, y_seg_end = affine * (i_seg_end, j_seg_end)
-                mindist_to_start = np.inf
-                mindist_to_end = np.inf
-                nearest_verti_to_start = None
-                nearest_verti_to_end = None
-                for verti, (x, y) in enumerate(line.coords):
-                    # calc dists, track mins, to start and end of segment
-                    start_dist = np.sqrt((x - x_seg_start)**2 + (y - y_seg_start)**2)
-                    end_dist = np.sqrt((x - x_seg_end)**2 + (y - y_seg_end)**2)
-                    if start_dist < mindist_to_start:
-                        mindist_to_start = start_dist
-                        nearest_verti_to_start = verti
-                    if end_dist < mindist_to_end:
-                        mindist_to_end = end_dist
-                        nearest_verti_to_end = verti
-                if nearest_verti_to_start < nearest_verti_to_end:
-                    # mindist to start comes earlier, then directions match, do nothing
-                    directed_segments[segi] = segment
-                    print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
-                    break
-                elif nearest_verti_to_end < nearest_verti_to_start:
-                    # mindist to end comes earlier, then swap segment direction
-                    directed_segments[segi] = segment[::-1]
-                    print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
-                    break
-                else:
-                    # single vertex is closest to both start and end. interpolate along line to get more verticies and retry
-                    print('  Segment {0}, not enough line/segment overlap, use dist to coast'.format(segi))
-                    #newcoords = []
-                    #for coord, nextcoord in zip(line.coords[:-1], line.coords[1:]):
-                        #newcoords.append(coord)
-                        #subline = sgeom.LineString([coord, nextcoord])
-                        #newcoords.extend([subline.interpolate(frac, normalized=True) for frac in np.linspace(0,1,11)[1:-1]]) # increase segments by 10x
-                    #newcoords.append(nextcoord)
-                    #line = sgeom.LineString(newcoords)
-                    use_dist_to_coast = True
+            # check if segment direction is correct or revered
+            # for each verticies from start of line to end
+            j_seg_start, i_seg_start = segment[0]
+            j_seg_end, i_seg_end = segment[-1]
+            x_seg_start, y_seg_start = affine * (i_seg_start, j_seg_start)
+            x_seg_end, y_seg_end = affine * (i_seg_end, j_seg_end)
+            mindist_to_start = np.inf
+            mindist_to_end = np.inf
+            nearest_verti_to_start = None
+            nearest_verti_to_end = None
+            for verti, (x, y) in enumerate(line.coords):
+                # calc dists, track mins, to start and end of segment
+                start_dist = np.sqrt((x - x_seg_start)**2 + (y - y_seg_start)**2)
+                end_dist = np.sqrt((x - x_seg_end)**2 + (y - y_seg_end)**2)
+                if start_dist < mindist_to_start:
+                    mindist_to_start = start_dist
+                    nearest_verti_to_start = verti
+                if end_dist < mindist_to_end:
+                    mindist_to_end = end_dist
+                    nearest_verti_to_end = verti
+            if nearest_verti_to_start < nearest_verti_to_end:
+                # mindist to start comes earlier, then directions match, do nothing
+                directed_segments[segi] = segment
+                print('Segment {0}: {1} to {2} (no change)'.format(segi, segment[0], segment[-1]))
+            elif nearest_verti_to_end < nearest_verti_to_start:
+                # mindist to end comes earlier, then swap segment direction
+                directed_segments[segi] = segment[::-1]
+                print('Segment {0}: {1} to {2} (reversed)'.format(segi, segment[-1], segment[0]))
+            else:
+                print('  Segment {0}, not enough line/segment overlap, use dist to coast'.format(segi))
+                use_dist_to_coast = True
         if (count < min(7, len(segments))) or use_dist_to_coast:
             # use dist_to_coast since not enough segment pixels align with an osm waterway
             if ((riv_dist_to_coast[segment[0]] < riv_dist_to_coast[segment[-1]])): # and
@@ -1212,7 +1201,9 @@ def remap_riv_network(source, target, env):
 
                     # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
                     if ((abs(last_node[0]-next_node[0]) == 1) and
-                        (abs(last_node[1]-next_node[1]) == 1)):
+                        (abs(last_node[1]-next_node[1]) == 1) and
+                        ((next_node[0], last_node[1]) in nodes) and
+                        ((last_node[0], next_node[1]) in nodes)):
                         corner1_node = (next_node[0], last_node[1])
                         corner2_node = (last_node[0], next_node[1])
                         corner1_cell = cellid[nodes.index(corner1_node)]
@@ -1247,7 +1238,8 @@ def remap_riv_network(source, target, env):
                     newbranch = branch # really same branch
                 to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
-            (dist_to_coast[nearestnode[rivj,rivi]] <= 1)): # node units
+            (dist_to_coast[nearestnode[rivj,rivi]] <= 1) and # node units
+            (next_node is not None)):
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
             # dont do this for likely upstream points, just leave existing connections
             # helps with errors in osm_river, dont want to strand water upstream
