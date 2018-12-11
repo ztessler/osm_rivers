@@ -436,7 +436,7 @@ def import_rgis_network(source, target, env):
     for j in range(nj):
         for i in range(ni):
             if cellids[j,i] != nodata:
-                ll = affine * (i, j)
+                ll = affine * (i+.5, j+.5)
                 xy = proj(*ll)
                 G.add_node((i,j), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
                 if (minx < xy[0] < maxx) and (miny < xy[1] < maxy):
@@ -447,7 +447,7 @@ def import_rgis_network(source, target, env):
                     i2 = i + di
                     j2 = j + dj
                     if (0<=i2<ni and 0<=j2<nj) and cellids[j2, i2] != nodata:
-                        ll2 = affine * (i2, j2)
+                        ll2 = affine * (i2+.5, j2+.5)
                         xy2 = proj(*ll2)
                         G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
                         G.add_edge((i, j), (i2, j2))
