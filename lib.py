@@ -64,8 +64,34 @@ def project_and_clip_osm_waterways(source, target, env):
     rivers = rivers[rivers.length > 0]
 
     rivers.to_file(str(target[0]), encoding='utf-8')
-    with open(str(target[1]), 'w') as fout:
-        fout.write(laea.proj4_init + '\n')
+    return 0
+
+
+def project_and_clip_coastline(source, target, env):
+    coast_ll = geopandas.read_file(str(source[0]))
+    delta_ll = geopandas.read_file(str(source[1]))
+
+    deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'], crs=delta_ll.crs)
+    lon0, lat0 = np.array(deltahull_ll.centroid.squeeze())
+
+    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
+                                          central_latitude = lat0)
+
+    deltahull3_ll = geopandas.GeoDataFrame(deltahull_ll.buffer(3), columns=['geometry'], crs=deltahull_ll.crs)
+    coast_ll_clip = geopandas.overlay(coast_ll, deltahull3_ll, how='intersection')
+    coast = coast_ll_clip.to_crs(laea.proj4_params)
+    deltahull = deltahull_ll.to_crs(laea.proj4_params)
+
+    coastbuff_poly = coast.buffer(2000).unary_union
+    #if isinstance(coastbuff_poly, sgeom.MultiPolygon):
+        #i = np.argmax([p.area for p in coastbuff_poly])
+        #coastbuff_poly = coastbuff_poly[i]
+    coastline = coastbuff_poly.buffer(-2000).boundary
+
+    deltahull_buff = deltahull.buffer(50000).unary_union
+    coastline_clip = coastline.intersection(deltahull_buff)
+
+    geopandas.GeoSeries(coastline_clip).to_file(str(target[0]))
     return 0
 
 
@@ -671,64 +697,20 @@ def calc_dist_to_coast(source, target, env):
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
-
-    nodes = list(G.nodes())
-    positions = [G.node[node]['xy'] for node in nodes]
-
-    coastal = {}
-    # find coastal nodes
-    minj = min([node[0] for node in nodes])
-    maxj = max([node[0] for node in nodes])
-    mini = min([node[1] for node in nodes])
-    maxi = max([node[1] for node in nodes])
-    for node in nodes:
-        if (not (minj < node[0] < maxj) or not (mini < node[1] < maxi)):
-            coastal[node] = False
-            continue
-        foundedge = False
-        for dj in [-1,0,1]:
-            for di in [-1,0,1]:
-                if (dj == di == 0):
-                    continue
-                othernode = (node[0] + dj, node[1] + di)
-                if othernode not in nodes:
-                    foundedge = True
-                    break
-            if foundedge:
-                break
-        coastal[node] = foundedge
+    coastline = geopandas.read_file(str(source[2])).loc[0,'geometry']
 
     # calc node_dist_to_coast
-    node_dist_to_coast = {}
-    for node in nodes:
-        mindist = np.inf
-        for othernode, iscoastal in coastal.items():
-            if not iscoastal:
-                continue
-            dist = np.sqrt((node[0]-othernode[0])**2 + (node[1]-othernode[1])**2)
-            if dist < mindist:
-                mindist = dist
-        node_dist_to_coast[node] = mindist
+    nodes = list(G.nodes())
+    positions = geopandas.GeoSeries([sgeom.Point(G.node[node]['xy']) for node in nodes], index=nodes)
+    node_dist_to_coast = positions.distance(coastline)
 
     # calc riv_dist_to_coast
-    riv_dist_to_coast = {}
     wet = np.where(rivers > 0)
-    for j,i in zip(*wet):
-        x, y = affine * (i, j)
-        mindist = np.inf
-        for othernode, iscoastal in coastal.items():
-            if not iscoastal:
-                continue
-            nodex, nodey = positions[nodes.index(othernode)]
-            dist = np.sqrt((nodex-x)**2 + (nodey-y)**2)
-            if dist < mindist:
-                mindist = dist
-        riv_dist_to_coast[j,i] = mindist
+    positions = geopandas.GeoSeries([sgeom.Point(affine * (i,j)) for j,i in zip(*wet)], index=zip(*wet))
+    riv_dist_to_coast = positions.distance(coastline)
 
-    with open(str(target[0]), 'wb') as fout:
-        pickle.dump(node_dist_to_coast, fout)
-    with open(str(target[1]), 'wb') as fout:
-        pickle.dump(riv_dist_to_coast, fout)
+    node_dist_to_coast.to_pickle(str(target[0]))
+    riv_dist_to_coast.to_pickle(str(target[1]))
     return 0
 
 

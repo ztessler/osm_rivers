@@ -55,6 +55,7 @@ STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{
 OSMshps = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 OSMwaterways = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_waterways_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
+GSHHSshp = '/Users/ecr/ztessler/data/Coastline/GSHHG/gshhg-shp-2.3.6/GSHHS_shp/f/GSHHS_f_L1.shp'
 
 thumbnail_size = 300
 
@@ -92,8 +93,15 @@ clipped_ww_vec = os.path.join(deltawork, '{0}_ww_clipped/{0}_ww_clipped.shp'.for
 ww_proj4str = os.path.join(deltawork, '{}_ww_proj4.txt'.format(delta))
 myCommand(
         source=[merged_waterways, deltashp],
-        target=[clipped_ww_vec, ww_proj4str],
+        target=clipped_ww_vec,
         action=lib.project_and_clip_osm_waterways)
+
+clipped_coastline = os.path.join(deltawork,
+        '{0}_coast_clipped/{0}_coast_clipped.shp'.format(delta))
+myCommand(
+        source=[GSHHSshp, deltashp],
+        target=clipped_coastline,
+        action=lib.project_and_clip_coastline)
 
 p = myCommand(
         source=clipped_vec,
@@ -328,7 +336,7 @@ myCommand(
 node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
 riv_dist_to_coast = os.path.join(domainwork, 'riv_dist_to_coast.pkl')
 myCommand(
-        source=[networkdelta, bifur_grid],
+        source=[networkdelta, bifur_grid, clipped_coastline],
         target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
@@ -368,7 +376,7 @@ env.Command(
 node_dist_to_coast1 = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
 riv_adj_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
 myCommand(
-        source=[networkdelta, bifur_adj],
+        source=[networkdelta, bifur_adj, clipped_coastline],
         target=[node_dist_to_coast1, riv_adj_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
