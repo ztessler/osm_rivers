@@ -1236,29 +1236,57 @@ def remap_riv_network(source, target, env):
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
-        for (from_cell, to_cells) in edits.items():
-            downstream = 0
-            for to_cell, branches in to_cells.items():
-                branch_found = False
-                for branch, val in branches.items():
-                    if val: # either None or True
-                        branch_found = True
-                if branch_found:
-                    downstream += 1
-            if downstream:
-                frac = 1/downstream
-            for to_cell, branches in to_cells.items():
-                from_node = nodes[cellid.index(from_cell)]
-                to_node = nodes[cellid.index(to_cell)]
-                successors = list(Gorig.successors(from_node))
-                if list(branches.values()) == [None]: # zero out for removed links
-                    csvwriter.writerow([from_cell, to_cell, 0])
-                else:
-                    if ((to_node in successors) and (frac != 1)): # zero out if single downlink changing to multiple
-                        csvwriter.writerow([from_cell, to_cell, 0])
-                    if ((to_node not in successors) or # record new link
-                        (frac != 1)): # record if fractional flux
-                        csvwriter.writerow([from_cell, to_cell, frac])
+        wrote = []
+        for oldedge in Gorig.edges:
+            # zero out removed links
+            if oldedge not in G.edges:
+                from_cell, to_cell = [cellid[nodes.index(n)] for n in oldedge]
+                csvwriter.writerow([from_cell, to_cell, 0])
+                wrote.append((from_cell, to_cell, 0))
+        for newedge in G.edges:
+            if newedge not in Gorig.edges:
+                # make new link
+                from_node, to_node = newedge
+                frac = 1/len(G.succ[from_node])
+                for neighbor_node in G.succ[from_node]:
+                    # adjust neighbor links to account for fractional flow
+                    from_cell = cellid[nodes.index(from_node)]
+                    neighbor_cell = cellid[nodes.index(neighbor_node)]
+                    if (from_node, neighbor_node) in Gorig.edges:
+                        # first zero out a link before adjusting for fractional flow
+                        if (from_cell, neighbor_cell, 0) not in wrote:
+                            csvwriter.writerow([from_cell, neighbor_cell, 0])
+                            wrote.append((from_cell, neighbor_cell, 0))
+                    if (from_cell, neighbor_cell, frac) not in wrote:
+                        csvwriter.writerow([from_cell, neighbor_cell, frac])
+                        wrote.append((from_cell, neighbor_cell, frac))
+
+
+    #with open(str(target[0]), 'w', newline='') as fout:
+        #csvwriter = csv.writer(fout)
+        #for (from_cell, to_cells) in edits.items():
+            #downstream = 0
+            #for to_cell, branches in to_cells.items():
+                #branch_found = False
+                #for branch, val in branches.items():
+                    #if val: # either None or True
+                        #branch_found = True
+                #if branch_found:
+                    #downstream += 1
+            #if downstream:
+                #frac = 1/downstream
+            #for to_cell, branches in to_cells.items():
+                #from_node = nodes[cellid.index(from_cell)]
+                #to_node = nodes[cellid.index(to_cell)]
+                #successors = list(Gorig.successors(from_node))
+                #if list(branches.values()) == [None]: # zero out for removed links
+                    #csvwriter.writerow([from_cell, to_cell, 0])
+                #else:
+                    #if ((to_node in successors) and (frac != 1)): # zero out if single downlink changing to multiple
+                        #csvwriter.writerow([from_cell, to_cell, 0])
+                    #if ((to_node not in successors) or # record new link
+                        #(frac != 1)): # record if fractional flux
+                        #csvwriter.writerow([from_cell, to_cell, frac])
 
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
