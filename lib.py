@@ -18,44 +18,48 @@ import pyproj
 import itertools
 from collections import defaultdict, Counter
 
+
+def set_projection(source, target, env):
+    delta_ll = geopandas.read_file(str(source[0]))
+    lon0, lat0 = np.array(delta_ll.dissolve(by='Delta').convex_hull.centroid.squeeze())
+    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
+                                          central_latitude = lat0)
+    with open(str(target[0]), 'w') as fout:
+        fout.write(laea.proj4_init)
+    return 0
+
+
 def project_and_clip_osm_rivers(source, target, env):
     rivers_ll = geopandas.read_file(str(source[0]))
     delta_ll = geopandas.read_file(str(source[1]))
+    with open(str(source[2]), 'r') as fin:
+        proj4_init = fin.read()
 
     deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'])
     deltahull_ll.crs = delta_ll.crs
-    lon0, lat0 = np.array(deltahull_ll.centroid.squeeze())
 
-    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
-                                          central_latitude = lat0)
-
-    rivers = rivers_ll.to_crs(laea.proj4_params)
-    delta = delta_ll.to_crs(laea.proj4_params)
-    deltahull = deltahull_ll.to_crs(laea.proj4_params)
+    rivers = rivers_ll.to_crs(proj4_init)
+    delta = delta_ll.to_crs(proj4_init)
+    deltahull = deltahull_ll.to_crs(proj4_init)
     deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'], crs=deltahull.crs)
 
     rivers_clip = geopandas.overlay(rivers, deltahull, how='intersection') #slow
-
     rivers_clip.to_file(str(target[0]))
-    with open(str(target[1]), 'w') as fout:
-        fout.write(laea.proj4_init + '\n')
     return 0
 
 
 def project_and_clip_osm_waterways(source, target, env):
     rivers_ll = geopandas.read_file(str(source[0]))
     delta_ll = geopandas.read_file(str(source[1]))
+    with open(str(source[2]), 'r') as fin:
+        proj4_init = fin.read()
 
     deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'])
     deltahull_ll.crs = delta_ll.crs
-    lon0, lat0 = np.array(deltahull_ll.centroid.squeeze())
 
-    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
-                                          central_latitude = lat0)
-
-    rivers = rivers_ll.to_crs(laea.proj4_params)
-    delta = delta_ll.to_crs(laea.proj4_params)
-    deltahull = deltahull_ll.to_crs(laea.proj4_params)
+    rivers = rivers_ll.to_crs(proj4_init)
+    delta = delta_ll.to_crs(proj4_init)
+    deltahull = deltahull_ll.to_crs(proj4_init)
     deltahull = geopandas.GeoDataFrame(deltahull.buffer(25000), columns=['geometry'], crs=deltahull.crs)
 
     rivgeom = rivers['geometry']
@@ -70,17 +74,15 @@ def project_and_clip_osm_waterways(source, target, env):
 def project_and_clip_coastline(source, target, env):
     coast_ll = geopandas.read_file(str(source[0]))
     delta_ll = geopandas.read_file(str(source[1]))
+    with open(str(source[2]), 'r') as fin:
+        proj4_init = fin.read()
 
     deltahull_ll = geopandas.GeoDataFrame(delta_ll.dissolve(by='Delta').convex_hull, columns=['geometry'], crs=delta_ll.crs)
-    lon0, lat0 = np.array(deltahull_ll.centroid.squeeze())
-
-    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = lon0,
-                                          central_latitude = lat0)
 
     deltahull3_ll = geopandas.GeoDataFrame(deltahull_ll.buffer(3), columns=['geometry'], crs=deltahull_ll.crs)
     coast_ll_clip = geopandas.overlay(coast_ll, deltahull3_ll, how='intersection')
-    coast = coast_ll_clip.to_crs(laea.proj4_params)
-    deltahull = deltahull_ll.to_crs(laea.proj4_params)
+    coast = coast_ll_clip.to_crs(proj4_init)
+    deltahull = deltahull_ll.to_crs(proj4_init)
 
     coastbuff_poly = coast.buffer(2000).unary_union
     #if isinstance(coastbuff_poly, sgeom.MultiPolygon):

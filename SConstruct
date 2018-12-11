@@ -82,24 +82,29 @@ else:
     merged_shps = OSMshps[0]
     merged_waterways = OSMwaterways[0]
 
-# project and clip river vectors to delta
-clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
 proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
 myCommand(
-        source=[merged_shps, deltashp],
-        target=[clipped_vec, proj4str],
+        source=deltashp,
+        target=proj4str,
+        action=lib.set_projection)
+
+# project and clip river vectors to delta
+clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
+myCommand(
+        source=[merged_shps, deltashp, proj4str],
+        target=clipped_vec,
         action=lib.project_and_clip_osm_rivers)
 clipped_ww_vec = os.path.join(deltawork, '{0}_ww_clipped/{0}_ww_clipped.shp'.format(delta))
 ww_proj4str = os.path.join(deltawork, '{}_ww_proj4.txt'.format(delta))
 myCommand(
-        source=[merged_waterways, deltashp],
+        source=[merged_waterways, deltashp, proj4str],
         target=clipped_ww_vec,
         action=lib.project_and_clip_osm_waterways)
 
 clipped_coastline = os.path.join(deltawork,
         '{0}_coast_clipped/{0}_coast_clipped.shp'.format(delta))
 myCommand(
-        source=[GSHHSshp, deltashp],
+        source=[GSHHSshp, deltashp, proj4str],
         target=clipped_coastline,
         action=lib.project_and_clip_coastline)
 
