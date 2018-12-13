@@ -84,23 +84,28 @@ else:
     merged_shps = OSMshps[0]
     merged_waterways = OSMwaterways[0]
 
+proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
+myCommand(
+        source=deltashp,
+        target=proj4str,
+        action=lib.set_projection)
+
 grwl_shp_list = os.path.join(deltawork, 'grwl_shp_list.txt')
 grwl_shps = glob.glob(GRWLshps)
 myCommand(
         source=[deltashp]+grwl_shps,
         target=grwl_shp_list,
         action=lib.find_grwl_list)
-merged_GRWL = os.path.join(deltawork, '{0}_grwl.shp'.format(delta))
+merged_GRWL_ll = os.path.join(deltawork, '{0}_grwl_ll.shp'.format(delta))
 myCommand(
         source=[grwl_shp_list]+grwl_shps,
-        target=merged_GRWL,
+        target=merged_GRWL_ll,
         action='cat ${SOURCES[0]} | xargs ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET')
-
-proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
+merged_GRWL = os.path.join(deltawork, '{0}_grwl.shp'.format(delta))
 myCommand(
-        source=deltashp,
-        target=proj4str,
-        action=lib.set_projection)
+        source=[proj4str, merged_GRWL_ll],
+        target=merged_GRWL,
+        action='cat ${SOURCES[0]} | xargs -I {} ogr2ogr -t_srs {} $TARGET ${SOURCES[1]}')
 
 # project and clip river vectors to delta
 clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
