@@ -1151,7 +1151,7 @@ def remap_riv_network(source, target, env):
     with open(str(source[5]), 'rb') as fin:
         nearestnode = pickle.load(fin)
     with open(str(source[6]), 'rb') as fin:
-        dist_to_coast = pickle.load(fin)
+        riv_dist_to_coast = pickle.load(fin)
 
     nodes = [node for node in G.nodes()]
     positions = [G.node[node]['xy'] for node in nodes]
@@ -1308,7 +1308,7 @@ def remap_riv_network(source, target, env):
                     newbranch = branch # really same branch
                 to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
-            (dist_to_coast[nearestnode[rivj,rivi]] <= 1) and # node units
+            (riv_dist_to_coast[rivj,rivi] <= 10000) and # meters
             (next_node is not None)):
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
             # dont do this for likely upstream points, just leave existing connections

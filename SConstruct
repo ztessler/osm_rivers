@@ -447,7 +447,7 @@ bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
 b = myCommand(
         source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
-            node_dist_to_coast],
+                riv_dist_to_coast],
         target=[bifurs, bifurnetwork, bifuroutlets],
         action=lib.remap_riv_network)
 env.Default(b)
