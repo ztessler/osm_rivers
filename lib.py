@@ -571,10 +571,10 @@ def find_bifurs(source, target, env):
 def plot_network_map(source, target, env):
     G = nx.read_yaml(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
-        bifurs = rast.read(1)
+        bifurs_pre = (rast.read(1) > 0).astype(np.int)
         affine = rast.transform
     with rasterio.open(str(source[2]), 'r') as rast:
-        extended_bifurs = rast.read(1)
+        bifurs = (rast.read(1) > 0).astype(np.int)
     labeltype = env['labels']
 
     # reset upstream counts
@@ -613,11 +613,21 @@ def plot_network_map(source, target, env):
     X = xs.reshape(I.shape)
     Y = ys.reshape(J.shape)
 
-    ext_bifurs_mask = np.ma.masked_equal(extended_bifurs, 0)
-    ax.pcolormesh(X, Y, ext_bifurs_mask, cmap=mpl.cm.Blues)
-
+    norm = mpl.colors.Normalize(vmin=0, vmax=2)
+    mpl.cm.Reds.set_bad(alpha=0)
     bifurs_mask = np.ma.masked_equal(bifurs, 0)
-    ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds)
+    ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds, norm=norm)
+
+    mpl.cm.Greens.set_bad(alpha=0)
+    old = bifurs_pre - bifurs
+    old_mask = np.ma.masked_less_equal(old, 0)
+    ax.pcolormesh(X, Y, old_mask, cmap=mpl.cm.Greens, norm=norm)
+
+    mpl.cm.Blues.set_bad(alpha=0)
+    new = bifurs - bifurs_pre
+    new_mask = np.ma.masked_less_equal(new, 0)
+    ax.pcolormesh(X, Y, new_mask, cmap=mpl.cm.Blues, norm=norm)
+
     ax.axis([X.min(), X.max(), Y.min(), Y.max()])
     ax.set_aspect('equal')
 
