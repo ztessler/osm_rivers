@@ -892,6 +892,62 @@ def set_segment_flowdir(source, target, env):
     return 0
 
 
+def set_segment_widths(source, target, env):
+    with open(str(source[0]), 'rb') as fin:
+        segments = pickle.load(fin)
+    with rasterio.open(str(source[1])) as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+    widths = geopandas.read_file(str(source[2]))
+    lines = widths['geometry']
+    sindex = lines.sindex
+
+    segment_widths = {}
+    scores = Counter()
+    x1, y1 = affine * (rivers.shape[1]//2, rivers.shape[0]//2)
+    x2, y2 = affine * (rivers.shape[1]//2 + 1, rivers.shape[0]//2 + 1)
+    dx = abs(x2-x1)
+    dy = abs(y2-y1)
+    pixelsize = np.sqrt(dx**2 + dy**2)
+    pixel10 = pixelsize * 10
+    for segi in sorted(segments):
+        segment = segments[segi]
+        # find nearest GRWL river. each segment gets a starting width and ending width as average along some distance of nearest GRWL river segments
+        scores.clear()
+        nearby_widths = defaultdict(list) # keep flowdir-ordered list of widths for each line that is close enough to river
+        # for each point on segment
+        # segment is directed, so widths are added to list in order
+        for (j,i) in segment:
+            x, y = affine * (i+.5, j+.5)
+            # find nearest waterway
+            pt = sgeom.Point(x, y)
+            nearbylines_idx = list(sindex.intersection((x-pixel10, y-pixel10, x+pixel10, y+pixel10)))
+            #dists = [pt.distance(line) for line in lines]
+            if nearbylines_idx:
+                dists = [pt.distance(line) for line in lines.iloc[nearbylines_idx]]
+                mindist = np.min(dists)
+                #ind = np.argmin(dists)
+                ind = nearbylines_idx[np.argmin(dists)]
+                GRWL_segmentID = widths.iloc[ind]['segmentID']
+                scores[GRWL_segmentID] += 1/max(mindist, pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
+                if (mindist < 2*pixelsize):
+                    nearby_widths[GRWL_segmentID].append(widths.iloc[ind]['width_m'])
+
+        # get widths of most common waterway
+        GRWL_segmentID, score = scores.most_common(1)[0]
+        ws = [w for w in nearby_widths[GRWL_segmentID] if w>1] # GRWL seems to use width==1 as missing data placeholder
+        n = min(7, len(ws))
+        width_start = np.mean(ws[:n]) if n>0 else None
+        width_end = np.mean(ws[-n:]) if n>0 else None
+        segment_widths[segi] = (width_start, width_end)
+
+        print('Segment {0}: {1}, {2}'.format(segi, GRWL_segmentID, segment_widths[segi]))
+
+    with open(str(target[0]), 'wb') as fout:
+        pickle.dump(segment_widths, fout)
+    return 0
+
+
 def remove_small_loops(source, target, env):
     with rasterio.open(str(source[0])) as rast:
         rivers = rast.read(1)
