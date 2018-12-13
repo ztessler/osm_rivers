@@ -6,6 +6,7 @@
 import os
 import sys
 import hashlib
+import glob
 
 import lib
 
@@ -56,6 +57,7 @@ OSMshps = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_water_
 OSMwaterways = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_waterways_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
 GSHHSshp = '/Users/ecr/ztessler/data/Coastline/GSHHG/gshhg-shp-2.3.6/GSHHS_shp/f/GSHHS_f_L1.shp'
+GRWLshps = '/Users/ecr/ztessler/data/Rivers/GRWL/GRWL_vector_V01.01/*.shp'
 
 thumbnail_size = 300
 
@@ -81,6 +83,18 @@ if len(OSMshps) > 1:
 else:
     merged_shps = OSMshps[0]
     merged_waterways = OSMwaterways[0]
+
+grwl_shp_list = os.path.join(deltawork, 'grwl_shp_list.txt')
+grwl_shps = glob.glob(GRWLshps)
+myCommand(
+        source=[deltashp]+grwl_shps,
+        target=grwl_shp_list,
+        action=lib.find_grwl_list)
+merged_GRWL = os.path.join(deltawork, '{0}_grwl.shp'.format(delta))
+myCommand(
+        source=[grwl_shp_list]+grwl_shps,
+        target=merged_GRWL,
+        action='cat ${SOURCES[0]} | xargs ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET')
 
 proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
 myCommand(

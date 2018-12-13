@@ -8,6 +8,7 @@ import geopandas
 import shapely.geometry as sgeom
 import rasterio
 import rasterio.features as rfeatures
+import fiona
 import cartopy.crs as ccrs
 import networkx as nx
 import skimage.morphology as morph
@@ -26,6 +27,22 @@ def set_projection(source, target, env):
                                           central_latitude = lat0)
     with open(str(target[0]), 'w') as fout:
         fout.write(laea.proj4_init)
+    return 0
+
+
+def find_grwl_list(source, target, env):
+    delta = geopandas.read_file(str(source[0]))
+    boundary = delta.buffer(1).unary_union.boundary
+    inbounds = []
+    for grwlfile in [str(s) for s in source[1:env['nsources']]]:
+        grwl = fiona.open(grwlfile)
+        gminx, gminy, gmaxx, gmaxy = grwl.bounds
+        footprint = sgeom.Polygon([(gminx, gminy), (gminx, gmaxy), (gmaxx, gmaxy), (gmaxx, gminy), (gminx, gminy)])
+        if footprint.intersects(boundary):
+            inbounds.append(grwlfile)
+    with open(str(target[0]), 'w') as fout:
+        for fname in inbounds:
+            fout.write(fname + '\n')
     return 0
 
 
