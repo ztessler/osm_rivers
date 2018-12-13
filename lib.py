@@ -833,6 +833,7 @@ def set_segment_flowdir(source, target, env):
     dy = abs(y2-y1)
     pixelsize = np.sqrt(dx**2 + dy**2)
     pixel10 = pixelsize * 10
+    used_dist_to_coast = []
     for segi in sorted(segments):
         segment = segments[segi]
         counts.clear()
@@ -896,6 +897,37 @@ def set_segment_flowdir(source, target, env):
             else:
                 directed_segments[segi] = segment
                 print('Segment {0}: {1} to {2} (no change (b))'.format(segi, segment[0], segment[-1]))
+            used_dist_to_coast.append(segi)
+
+    # check for bifurs which are only sinks or sources. suggests an incorrect direction. change one of the dist_to_coast method segments if there is one. otherwise change shortest segment. repeat until no changes
+    bifurs = np.where(rivers >= 3)
+    while True:
+        reversed_segment = False
+        for j,i in zip(*bifurs):
+            sinks = []
+            sources = []
+            for segi in list(directed_segments.keys()):
+                segment = directed_segments[segi]
+                if (j,i) == segment[0]:
+                    sources.append(segi)
+                if (j,i) == segment[-1]:
+                    sinks.append(segi)
+            if (not sources) or (not sinks):
+                segis = sources + sinks
+                # water can't get to or from this bifur
+                candidates = [segi for segi in segis if segi in used_dist_to_coast]
+                if len(candidates) == 1:
+                    segi = candidates[0]
+                    print('Found source-only or sink-only bifur - reversing segment {}'.format(segi))
+                    directed_segments[segi] = directed_segments[segi][::-1]
+                else:
+                    lengths = [len(directed_segments[segi]) for segi in segis]
+                    segi = segis[np.argmin(lengths)]
+                    print('Found source-only or sink-only bifur - reversing shortest segment {}'.format(candidates))
+                    directed_segments[segi] = directed_segments[segi][::-1]
+                reversed_segment = True
+        if not reversed_segment:
+            break
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(directed_segments, fout)
