@@ -811,6 +811,7 @@ def set_segment_flowdir(source, target, env):
     with open(str(source[3]), 'rb') as fin:
         riv_dist_to_coast = pickle.load(fin)
     lines = waterways['geometry']
+    sindex = lines.sindex
 
     #for each segment
     counts = Counter()
@@ -821,6 +822,7 @@ def set_segment_flowdir(source, target, env):
     dx = abs(x2-x1)
     dy = abs(y2-y1)
     pixelsize = np.sqrt(dx**2 + dy**2)
+    pixel10 = pixelsize * 10
     for segi in sorted(segments):
         segment = segments[segi]
         counts.clear()
@@ -830,10 +832,12 @@ def set_segment_flowdir(source, target, env):
             x, y = affine * (i+.5, j+.5)
             # find nearest waterway
             pt = sgeom.Point(x, y)
-            dists = [pt.distance(line) for line in lines]
-            ind = np.argmin(dists)
-            scores[ind] += 1/max(dists[ind], pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
-            counts[ind] += (dists[ind] < (2*pixelsize))
+            nearbylines_idx = list(sindex.intersection((x-pixel10, y-pixel10, x+pixel10, y+pixel10)))
+            dists = [pt.distance(line) for line in lines.iloc[nearbylines_idx]]
+            mindist = np.min(dists)
+            ind = nearbylines_idx[np.argmin(dists)]
+            scores[ind] += 1/max(mindist, pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
+            counts[ind] += (mindist < (2*pixelsize))
         # get direction of most common waterway
         ind, score = scores.most_common(1)[0]
         count = counts[ind]
