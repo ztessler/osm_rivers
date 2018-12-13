@@ -834,12 +834,11 @@ def set_segment_flowdir(source, target, env):
             ind = np.argmin(dists)
             scores[ind] += 1/max(dists[ind], pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
             counts[ind] += (dists[ind] < (2*pixelsize))
-            #TODO clip distances so that past a certain dist (pixelsize*3??) just add zero. require total score to be 3 of these, if not then use dist_to_coast metric
         # get direction of most common waterway
         ind, score = scores.most_common(1)[0]
         count = counts[ind]
         use_dist_to_coast = False
-        if count >= min(7, len(segments)):
+        if count >= min(7, len(segment)):
             # have enough overlap between osm river waterway and segment, use it's direction
             line = lines.iloc[ind]
             # check if segment direction is correct or revered
@@ -873,7 +872,7 @@ def set_segment_flowdir(source, target, env):
             else:
                 print('  Segment {0}, not enough line/segment overlap, use dist to coast'.format(segi))
                 use_dist_to_coast = True
-        if (count < min(7, len(segments))) or use_dist_to_coast:
+        if (count < min(7, len(segment))) or use_dist_to_coast:
             # use dist_to_coast since not enough segment pixels align with an osm waterway
             if ((riv_dist_to_coast[segment[0]] < riv_dist_to_coast[segment[-1]])): # and
                     #(riv_dist_to_coast[segment[0]] < 10000) and
