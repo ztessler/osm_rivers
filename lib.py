@@ -1182,6 +1182,8 @@ def remap_riv_network(source, target, env):
         nearestnode = pickle.load(fin)
     with open(str(source[6]), 'rb') as fin:
         riv_dist_to_coast = pickle.load(fin)
+    with open(str(source[7]), 'rb') as fin:
+        river_widths = pickle.load(fin)
 
     nodes = [node for node in G.nodes()]
     positions = [G.node[node]['xy'] for node in nodes]
@@ -1205,7 +1207,7 @@ def remap_riv_network(source, target, env):
     next_branch = 2
     to_visit = []
     for riv_pt in upstream_endpoints:
-        # dont start on a node, wait to snap to one
+        # dont start on a node, wait to snap to one. should be first step since river was extended to hit the head node
         to_visit.append((riv_pt, None, branch))
         branch = next_branch
         next_branch += 1
@@ -1221,6 +1223,9 @@ def remap_riv_network(source, target, env):
             last_node = nodes[last_node_i]
             last_cell = cellid[last_node_i]
             visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
+            if 'branches' not in G.nodes[last_node]:
+                # first time the river snaps to a node, that node has not yet been added to a branch. do that
+                G.nodes[last_node]['branches'] = {branch: river_widths[rivj,rivi]}
         else:
             last_node = None
             last_cell = None
@@ -1264,6 +1269,7 @@ def remap_riv_network(source, target, env):
                 print('Undo:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                 G.remove_edge(next_node, last_node)
                 G.nodes[last_node]['branches'].discard(branch)
+                del G.edges[last_node, next_node]['branches'][branch]
                 del edits[next_cell][last_cell][branch]
             else:
                 # regular re-routing
@@ -1279,14 +1285,19 @@ def remap_riv_network(source, target, env):
                          (None not in edits[next_cell][last_cell].values()))):
 
                     # create a new link
+                    print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+                    G.add_edge(last_node, next_node)
+                    edits[last_cell][next_cell][branch] = True
                     if 'branches' not in G.nodes[next_node]:
                         G.nodes[next_node]['branches'] = {branch}
                     else:
                         G.nodes[next_node]['branches'].add(branch)
-                    print('New:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
-                    edits[last_cell][next_cell][branch] = True
+                    if 'branches' not in G.edges[last_node, next_node]: # can we ever even have multiple???
+                        G.edges[last_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                    else:
+                        G.edges[last_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
                     for downstream_node in list(G.successors(last_node)):
-                        # remove existing downstream links
+                        # remove existing downstream links (other than this or other new ones)
                         downstream_cell = cellid[nodes.index(downstream_node)]
                         if (downstream_cell not in edits[last_cell]):
                             print('Remove(a):', branch, ': cellid {0} to {1}'.format(last_cell, downstream_cell))
@@ -1297,7 +1308,6 @@ def remap_riv_network(source, target, env):
                         print('Remove(b):', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                         G.remove_edge(next_node, last_node)
                         edits[next_cell][last_cell][branch] = None
-                    G.add_edge(last_node, next_node)
 
                     # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
                     if ((abs(last_node[0]-next_node[0]) == 1) and
@@ -1312,11 +1322,19 @@ def remap_riv_network(source, target, env):
                             G.remove_edge(corner2_node, corner1_node)
                             edits[corner2_cell][corner1_cell][branch] = None
                             G.add_edge(corner2_node, next_node)
+                            if 'branches' not in G.edges[corner2_node, next_node]: # can we ever even have multiple???
+                                G.edges[corner2_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                            else:
+                                G.edges[corner2_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
                             edits[corner2_cell][next_cell][branch] = True # anything other than None
                         if (corner2_node in G.succ[corner1_node]):
                             G.remove_edge(corner1_node, corner2_node)
                             edits[corner1_cell][corner2_cell][branch] = None
                             G.add_edge(corner1_node, next_node)
+                            if 'branches' not in G.edges[corner1_node, next_node]: # can we ever even have multiple???
+                                G.edges[corner1_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                            else:
+                                G.edges[corner1_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
                             edits[corner1_cell][next_cell][branch] = True # anything other than None
 
         elif (not riv_near_node): #or
@@ -1363,9 +1381,39 @@ def remap_riv_network(source, target, env):
             if newedge not in Gorig.edges:
                 # make new link
                 from_node, to_node = newedge
-                frac = 1/len(G.succ[from_node])
+                discharges = {}
+                total_discharge = 0
                 for neighbor_node in G.succ[from_node]:
-                    # adjust neighbor links to account for fractional flow
+                    discharge = 0
+                    for branch, width in G.edges[(from_node, neighbor_node)]['branches'].items():
+                        # power law relationship between river width and discharge
+                        # kellerhals and church 1989, bray 1973,1975,
+                        # also http://publications.gc.ca/collections/collection_2007/dfo-mpo/Fs97-6-2637E.pdf page 10
+                        # W ~ a * Q**.5
+                        # a ~ 4-4.5 for bankfull flow, ~9-10 for mean flow
+                        # exponent ~.4 for very small rivers, ~.55 for very large, ~.5 for medium
+                        # constant a cancels out in these ratios. use exponent=.5 for all (Q ~ w**2)
+                        if width is not None:
+                            discharge += width**2
+                        else:
+                            discharge += 0
+                    total_discharge += discharge
+                    if discharge == 0:
+                        discharge = None
+                    discharges[neighbor_node] = discharge
+                if total_discharge == 0:
+                    # all widths are none. just set each value to a constant, will end up with balanced branches
+                    for neighbor_node in G.succ[from_node]:
+                        discharges[neighbor_node] = 1
+                else:
+                    # check for any missing widths (discharges) set each missing to 10% of total we do have
+                    for neighbor_node in G.succ[from_node]:
+                        # adjust neighbor links to account for fractional flow
+                        if discharges[neighbor_node] is None:
+                            discharges[neighbor_node] = .1 * total_discharge
+                total_discharge = sum(list(discharges.values()))
+                for neighbor_node in G.succ[from_node]:
+                    dis_frac = discharges[neighbor_node] / total_discharge
                     from_cell = cellid[nodes.index(from_node)]
                     neighbor_cell = cellid[nodes.index(neighbor_node)]
                     if (from_node, neighbor_node) in Gorig.edges:
@@ -1373,36 +1421,9 @@ def remap_riv_network(source, target, env):
                         if (from_cell, neighbor_cell, 0) not in wrote:
                             csvwriter.writerow([from_cell, neighbor_cell, 0])
                             wrote.append((from_cell, neighbor_cell, 0))
-                    if (from_cell, neighbor_cell, frac) not in wrote:
-                        csvwriter.writerow([from_cell, neighbor_cell, frac])
-                        wrote.append((from_cell, neighbor_cell, frac))
-
-
-    #with open(str(target[0]), 'w', newline='') as fout:
-        #csvwriter = csv.writer(fout)
-        #for (from_cell, to_cells) in edits.items():
-            #downstream = 0
-            #for to_cell, branches in to_cells.items():
-                #branch_found = False
-                #for branch, val in branches.items():
-                    #if val: # either None or True
-                        #branch_found = True
-                #if branch_found:
-                    #downstream += 1
-            #if downstream:
-                #frac = 1/downstream
-            #for to_cell, branches in to_cells.items():
-                #from_node = nodes[cellid.index(from_cell)]
-                #to_node = nodes[cellid.index(to_cell)]
-                #successors = list(Gorig.successors(from_node))
-                #if list(branches.values()) == [None]: # zero out for removed links
-                    #csvwriter.writerow([from_cell, to_cell, 0])
-                #else:
-                    #if ((to_node in successors) and (frac != 1)): # zero out if single downlink changing to multiple
-                        #csvwriter.writerow([from_cell, to_cell, 0])
-                    #if ((to_node not in successors) or # record new link
-                        #(frac != 1)): # record if fractional flux
-                        #csvwriter.writerow([from_cell, to_cell, frac])
+                    if (from_cell, neighbor_cell, 1) not in wrote: # use 1 to avoid round-off errors. will revisit some edges if both bifur branches are new. neighbor_cell will be computed twice, but dont want to write twice
+                        csvwriter.writerow([from_cell, neighbor_cell, dis_frac])
+                        wrote.append((from_cell, neighbor_cell, 1))
 
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
