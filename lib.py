@@ -844,11 +844,12 @@ def set_segment_flowdir(source, target, env):
             # find nearest waterway
             pt = sgeom.Point(x, y)
             nearbylines_idx = list(sindex.intersection((x-pixel10, y-pixel10, x+pixel10, y+pixel10)))
-            dists = [pt.distance(line) for line in lines.iloc[nearbylines_idx]]
-            mindist = np.min(dists)
-            ind = nearbylines_idx[np.argmin(dists)]
-            scores[ind] += 1/max(mindist, pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
-            counts[ind] += (mindist < (2*pixelsize))
+            if nearbylines_idx:
+                dists = [pt.distance(line) for line in lines.iloc[nearbylines_idx]]
+                mindist = np.min(dists)
+                ind = nearbylines_idx[np.argmin(dists)]
+                scores[ind] += 1/max(mindist, pixelsize) # inverse distance weight so closest points count most, but dont go closer than nominal resolution since one very very close line could blow up comparison
+                counts[ind] += (mindist < (2*pixelsize))
         # get direction of most common waterway
         ind, score = scores.most_common(1)[0]
         count = counts[ind]
