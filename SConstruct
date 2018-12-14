@@ -416,10 +416,10 @@ myCommand(
         target=segments,
         action=lib.set_segment_flowdir)
 
-seg_widths = os.path.join(domainwork, '{0}_river_widths.pkl'.format(delta))
+river_widths = os.path.join(domainwork, '{0}_river_widths.pkl'.format(delta))
 myCommand(
         source=[segments, bifur_adj, merged_GRWL],
-        target=seg_widths,
+        target=river_widths,
         action=lib.set_segment_widths)
 
 next_rivpts = os.path.join(domainwork, '{0}_next_rivpts.pkl'.format(delta))

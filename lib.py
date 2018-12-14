@@ -978,15 +978,35 @@ def set_segment_widths(source, target, env):
         # get widths of most common waterway
         GRWL_segmentID, score = scores.most_common(1)[0]
         ws = [w for w in nearby_widths[GRWL_segmentID] if w>1] # GRWL seems to use width==1 as missing data placeholder
-        n = min(7, len(ws))
+        if len(ws) <= 7:
+            n = len(ws)
+        elif len(ws) <= 14:
+            n = 7
+        else:
+            n = len(ws)//2
         width_start = np.mean(ws[:n]) if n>0 else None
         width_end = np.mean(ws[-n:]) if n>0 else None
         segment_widths[segi] = (width_start, width_end)
-
         print('Segment {0}: {1}, {2}'.format(segi, GRWL_segmentID, segment_widths[segi]))
 
+    # TODO give each point on each segment an interpolated width. will make branching easier
+    river_widths = defaultdict(list)
+    for segi, segment in segments.items():
+        n = len(segment)
+        widths = segment_widths[segi]
+        fracs = np.linspace(1, 0, n)
+        for i, (rivj,rivi) in enumerate(segment):
+            if widths == (None, None):
+                river_widths[rivj,rivi].append(None)
+            else:
+                frac = fracs[i]
+                river_widths[rivj,rivi].append(frac*widths[0] + (1-frac)*widths[1])
+    # bifur points will have multiple widths.
+    for (rivj,rivi), widths in list(river_widths.items()):
+        river_widths[rivj,rivi] = np.mean([w for w in widths if w is not None])
+
     with open(str(target[0]), 'wb') as fout:
-        pickle.dump(segment_widths, fout)
+        pickle.dump(river_widths, fout)
     return 0
 
 
