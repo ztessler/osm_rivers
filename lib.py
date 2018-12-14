@@ -1126,18 +1126,6 @@ def merge_riv_path_to_mainstem(source, target, env):
     ndownstream = [ndownstream[node] for node in nodes]
     positions = [positions[node] for node in nodes]
 
-    def _trim_river(rivers, rivpt, next_rivpt, prev_rivpt):
-        # erase river above rivpt, and adjust next_rivpt and prev_rivpt dicts
-        thispt = rivpt
-        rivers[thispt] = 1
-        to_visit = [(thispt, uppt) for uppt in prev_rivpt[thispt]]
-        while to_visit:
-            downpt, thispt = to_visit.pop()
-            rivers[thispt] = 0
-            if thispt in prev_rivpt:
-                to_visit.extend([(thispt, uppt) for uppt in prev_rivpt[thispt]])
-        return rivers
-
     def _extend_river(rivers, mindist_rivpt, head_node_ij):
         # draw new river in straight line from closest river approach to head_node
         head_node_ji = tuple(head_node_ij[::-1])
@@ -1156,31 +1144,21 @@ def merge_riv_path_to_mainstem(source, target, env):
             rast.write(rivers, 1)
         return 0
 
-    found_head_node_on_riv = False
-    for rivpt, node in nearestnode.items():
-        if node == head_node:
-            found_head_node_on_riv = True
-            break
-    if found_head_node_on_riv:
-        rivers = _trim_river(rivers, rivpt, next_rivpt, prev_rivpt)
-    else:
-        to_visit = [head_rivpt]
-        head_node_xy = positions[head_node_i]
-        head_node_x, head_node_y = positions[head_node_i]
-        head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
-        mindist = np.inf
-        while to_visit:
-            rivpt = to_visit.pop()
-            rivj, rivi = rivpt
-            rivx, rivy = affine * (rivi,rivj)
-            dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
-            if dist < mindist:
-                mindist = dist
-                mindist_rivpt = rivpt
-            to_visit.extend(next_rivpt[rivpt])
-        if mindist_rivpt != head_rivpt:
-            rivers = _trim_river(rivers, mindist_rivpt, next_rivpt, prev_rivpt)
-        rivers = _extend_river(rivers, mindist_rivpt, head_node_ij)
+    to_visit = [head_rivpt]
+    head_node_xy = positions[head_node_i]
+    head_node_x, head_node_y = positions[head_node_i]
+    head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
+    mindist = np.inf
+    while to_visit:
+        rivpt = to_visit.pop()
+        rivj, rivi = rivpt
+        rivx, rivy = affine * (rivi,rivj)
+        dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
+        if dist < mindist:
+            mindist = dist
+            mindist_rivpt = rivpt
+        to_visit.extend(next_rivpt[rivpt])
+    rivers = _extend_river(rivers, mindist_rivpt, head_node_ij)
 
     with rasterio.open(str(target[0]), 'w', **meta) as rast:
         rast.write(rivers, 1)
