@@ -977,8 +977,10 @@ def set_segment_widths(source, target, env):
                     nearby_widths[GRWL_segmentID].append(widths.iloc[ind]['width_m'])
 
         # get widths of most common waterway
-        GRWL_segmentID, score = scores.most_common(1)[0]
-        ws = [w for w in nearby_widths[GRWL_segmentID] if w>1] # GRWL seems to use width==1 as missing data placeholder
+        ws = []
+        if nearby_widths:
+            GRWL_segmentID, score = scores.most_common(1)[0]
+            ws = [w for w in nearby_widths[GRWL_segmentID] if w>1] # GRWL seems to use width==1 as missing data placeholder
         if len(ws) <= 7:
             n = len(ws)
         elif len(ws) <= 14:
