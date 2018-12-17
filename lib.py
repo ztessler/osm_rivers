@@ -1108,18 +1108,10 @@ def merge_riv_path_to_mainstem(source, target, env):
         affine = rast.transform
         meta = rast.meta
     with open(str(source[1]), 'rb') as fin:
-        head_rivpt = pickle.load(fin)
-    with open(str(source[2]), 'rb') as fin:
-        next_rivpt = pickle.load(fin)
-    with open(str(source[3]), 'rb') as fin:
-        prev_rivpt = pickle.load(fin)
-    with open(str(source[4]), 'rb') as fin:
-        nearestnode = pickle.load(fin)
-    with open(str(source[5]), 'rb') as fin:
         nupstream = pickle.load(fin)
-    with open(str(source[6]), 'rb') as fin:
+    with open(str(source[2]), 'rb') as fin:
         ndownstream = pickle.load(fin)
-    with open(str(source[7]), 'rb') as fin:
+    with open(str(source[3]), 'rb') as fin:
         positions = pickle.load(fin)
 
     nodes = sorted(nupstream) # sorting keys of dict
@@ -1138,27 +1130,19 @@ def merge_riv_path_to_mainstem(source, target, env):
     score = np.array(nupstream) * np.array(ndownstream) # maximized at "center" of mainstem, which we assume is upstream of the delta boundary
     head_node_i = np.argmax(score)
     head_node = nodes[head_node_i]
-    nearest = nearestnode[head_rivpt]
 
-    if head_node == nearest:
-        with rasterio.open(str(target[0]), 'w', **meta) as rast:
-            rast.write(rivers, 1)
-        return 0
-
-    to_visit = [head_rivpt]
+    wet = np.where(rivers)
     head_node_xy = positions[head_node_i]
     head_node_x, head_node_y = positions[head_node_i]
     head_node_ij = [int(val) for val in ~affine * (head_node_x, head_node_y)]
     mindist = np.inf
-    while to_visit:
-        rivpt = to_visit.pop()
+    for rivpt in zip(*wet):
         rivj, rivi = rivpt
         rivx, rivy = affine * (rivi,rivj)
         dist = np.sqrt((head_node_x - rivx)**2 + (head_node_y - rivy)**2)
         if dist < mindist:
             mindist = dist
             mindist_rivpt = rivpt
-        to_visit.extend(next_rivpt[rivpt])
     rivers = _extend_river(rivers, mindist_rivpt, head_node_ij)
 
     with rasterio.open(str(target[0]), 'w', **meta) as rast:

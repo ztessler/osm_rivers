@@ -386,8 +386,7 @@ myCommand(
 # final river version, cleaned and merged network. put in domainwork dir since depends on rgis res
 river_adj = os.path.join(domainwork, '{0}_river_adj_to_network.tif'.format(delta))
 myCommand(
-        source=[bifur_grid, head_rivpt, next_rivpts, prev_rivpts, nearestnodes1, nupstream,
-            ndownstream, nodepositions],
+        source=[bifur_grid, nupstream, ndownstream, nodepositions],
         target=river_adj,
         action=lib.merge_riv_path_to_mainstem)
 
