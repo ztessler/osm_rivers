@@ -1210,7 +1210,7 @@ def remap_riv_network(source, target, env):
             visited.add(((rivj, rivi), last_node_i)) # include last_node_i so that different branches coming from different nodes can re-visit a node. but branches that are on the same node and same rivpts are dropped, since they will trace the same route
             if 'branches' not in G.nodes[last_node]:
                 # first time the river snaps to a node, that node has not yet been added to a branch. do that
-                G.nodes[last_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                G.nodes[last_node]['branches'] = {branch}
         else:
             last_node = None
             last_cell = None
