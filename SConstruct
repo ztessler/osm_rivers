@@ -396,11 +396,11 @@ env.Command(
         target=bifur_adj,
         action=lib.find_bifurs)
 
-node_dist_to_coast1 = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
-riv_adj_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
+node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
+riv_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
 myCommand(
         source=[networkdelta, bifur_adj, clipped_coastline],
-        target=[node_dist_to_coast1, riv_adj_dist_to_coast],
+        target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
 segments4 = os.path.join(domainwork, '{0}_river_segments.4.pkl'.format(delta))
@@ -411,7 +411,7 @@ myCommand(
 
 segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
 myCommand(
-        source=[segments4, bifur_adj, clipped_ww_vec, riv_adj_dist_to_coast],
+        source=[segments4, bifur_adj, clipped_ww_vec, riv_dist_to_coast],
         target=segments,
         action=lib.set_segment_flowdir)
 
