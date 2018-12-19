@@ -992,7 +992,7 @@ def set_segment_widths(source, target, env):
         segment_widths[segi] = (width_start, width_end)
         print('Segment {0}: {1}, {2}'.format(segi, GRWL_segmentID, segment_widths[segi]))
 
-    # TODO give each point on each segment an interpolated width. will make branching easier
+    # give each point on each segment an interpolated width. will make branching easier
     river_widths = defaultdict(list)
     for segi, segment in segments.items():
         n = len(segment)
@@ -1006,7 +1006,11 @@ def set_segment_widths(source, target, env):
                 river_widths[rivj,rivi].append(frac*widths[0] + (1-frac)*widths[1])
     # bifur points will have multiple widths.
     for (rivj,rivi), widths in list(river_widths.items()):
-        river_widths[rivj,rivi] = np.mean([w for w in widths if w is not None])
+        widths = [w for w in widths if w is not None]
+        if widths:
+            river_widths[rivj,rivi] = np.mean(widths)
+        else:
+            river_widths[rivj,rivi] = None
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(river_widths, fout)
