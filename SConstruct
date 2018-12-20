@@ -468,3 +468,10 @@ p = myCommand(
                 'convert -trim $TARGET $TARGET'],
         inspect=INSPECTfig)
 env.Default(p)
+
+bifurnetworkgraphml = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.graphml'.format(domain, delta, STNres))
+t = myCommand(
+        source=bifurnetwork,
+        target=bifurnetworkgraphml,
+        action=lib.convert_network_to_graphml)
+env.Default(t)

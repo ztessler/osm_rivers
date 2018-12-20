@@ -522,6 +522,41 @@ def import_rgis_network(source, target, env):
     return 0
 
 
+def convert_network_to_graphml(source, target, env):
+    G = nx.read_yaml(str(source[0]))
+    nodes = list(G.nodes)
+    for node in nodes:
+        G.nodes[node]['basin'] = int(G.nodes[node]['basin'])
+        G.nodes[node]['cellid'] = int(G.nodes[node]['cellid'])
+        G.nodes[node]['downstream'] = int(G.nodes[node]['downstream'])
+        G.nodes[node]['upstream'] = int(G.nodes[node]['upstream'])
+        G.nodes[node]['lon'] = float(G.nodes[node]['ll'][0])
+        G.nodes[node]['lat'] = float(G.nodes[node]['ll'][1])
+        del G.nodes[node]['ll']
+        G.nodes[node]['x'] = float(G.nodes[node]['xy'][0])
+        G.nodes[node]['y'] = float(G.nodes[node]['xy'][1])
+        del G.nodes[node]['xy']
+        if 'branches' in G.nodes[node]:
+            G.nodes[node]['branches'] = ' '.join([str(b) for b in G.nodes[node]['branches']])
+
+    edges = list(G.edges)
+    for edge in edges:
+        if G.edges[edge]:
+            branches = []
+            weights = []
+            for branch, weight in G.edges[edge]['branches'].items():
+                branches.append(branch)
+                weights.append(weight)
+            branches = ' '.join([str(b) for b in branches])
+            weights = ' '.join([str(w) for w in weights])
+            G.edges[edge]['branches'] = branches
+            G.edges[edge]['weights'] = weights
+
+    nx.write_graphml(G, str(target[0]))
+    return 0
+
+
+
 def find_bifurs(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         rivers = rast.read(1)
