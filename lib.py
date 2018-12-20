@@ -1217,8 +1217,22 @@ def remap_riv_network(source, target, env):
     ndownstream = [G.node[node]['downstream'] for node in nodes]
     cellid = [G.node[node]['cellid'] for node in nodes]
 
-    p0 = positions[0]
-    resolution = np.min([np.sqrt((p0[0]-p[0])**2 + (p0[1]-p[1])**2) for p in positions[1:]])
+    maxresolution = -np.inf
+    for node1 in nodes:
+        x1, y1 = positions[nodes.index(node1)]
+        # check both diagonals
+        node2 = (node1[0]+1, node1[1]+1)
+        if node2 in nodes:
+            x2, y2 = positions[nodes.index(node2)]
+            dist = np.sqrt((x2-x1)**2 + (y2-y1)**2)
+            if dist > maxresolution:
+                maxresolution = dist
+        node3 = (node1[0]+1, node1[1]-1)
+        if node3 in nodes:
+            x3, y3 = positions[nodes.index(node3)]
+            dist = np.sqrt((x3-x1)**2 + (y3-y1)**2)
+            if dist > maxresolution:
+                maxresolution = dist
 
     minx, maxy = affine * (0,0)
     maxx, miny = affine * (rivers.shape[1], rivers.shape[0])
@@ -1264,9 +1278,9 @@ def remap_riv_network(source, target, env):
         xnode, ynode = positions[next_node_i]
         xp = xriv - xnode
         yp = yriv - ynode
-        dist = np.sqrt(xp**2 + yp**2)
-        halfres = .5 * resolution
-        widehalfres = .6 * resolution
+        #dist = np.sqrt(xp**2 + yp**2)
+        #halfres = .5 * maxresolution
+        widehalfres = .6 * maxresolution
         # nearness determined by star-shape region around node. half resolution dist ensures all
         # gridlines get captured, but second terms chops out region in middle. makes diagonal
         # connections easier
@@ -1277,8 +1291,9 @@ def remap_riv_network(source, target, env):
                          #(yp + xp < widehalfres) and (yp - xp > -widehalfres) and
                          #(yp + xp > -widehalfres) and (yp - xp < widehalfres))
         # or a star with straight edges, gathers a bit more of the center than first star method
-        riv_near_node = ((dist <= halfres) and
-                         ((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
+        #riv_near_node = ((dist <= halfres) and
+                         #((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
+        riv_near_node = (((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
                          ((yp - 2*xp > -widehalfres) or (yp - xp/2 > -widehalfres/2)) and
                          ((yp + 2*xp > -widehalfres) or (yp + xp/2 > -widehalfres/2)) and
                          ((yp - 2*xp <  widehalfres) or (yp - xp/2 <  widehalfres/2)))
@@ -1295,7 +1310,6 @@ def remap_riv_network(source, target, env):
                 print('Undo:', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                 G.remove_edge(next_node, last_node)
                 G.nodes[last_node]['branches'].discard(branch)
-                del G.edges[last_node, next_node]['branches'][branch]
                 del edits[next_cell][last_cell][branch]
             else:
                 # regular re-routing
