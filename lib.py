@@ -571,6 +571,11 @@ def find_bifurs(source, target, env):
     # just in case this is run on a bifur_grid
     rivers[rivers != 0] = 1
 
+    # add one pixel border to make sure any endpoints on edge are picked up
+    bordered = np.zeros((rivers.shape[0]+2, rivers.shape[1]+2))
+    bordered[1:-1,1:-1] = rivers
+    rivers = bordered
+
     # count all neighbor river cells for each river cell
     neighbor_elem = np.array([[1,1,1],
                               [1,0,1],
@@ -603,6 +608,9 @@ def find_bifurs(source, target, env):
     # 1: river head or mouth
     # 2: river
     # 3: river bifurcation
+
+    # remove one-pixel border
+    bifurs = bifurs[1:-1, 1:-1]
 
     with rasterio.open(str(target[0]), 'w', **meta) as out:
         out.write(bifurs, 1)
