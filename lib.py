@@ -263,6 +263,11 @@ def rasterize_riv(source, target, env):
             transform=affine,
             nodata=0) as rast:
         rast.write(burned, 1)
+
+    with open(str(target[1]), 'wb') as fout:
+        pickle.dump(affine, fout)
+    with open(str(target[2]), 'wb') as fout:
+        pickle.dump(imshape, fout)
     return 0
 
 
@@ -454,10 +459,11 @@ def import_rgis_network(source, target, env):
         basins = rast.read(1)
     with rasterio.open(str(source[2]), 'r') as rast:
         flowdir = rast.read(1)
-    with rasterio.open(str(source[3]), 'r') as rast:
-        rivers = rast.read(1)
-        affine_riv = rast.transform
-    with open(str(source[4]), 'r') as fin:
+    with open(str(source[3]), 'rb') as fin:
+        affine_riv = pickle.load(fin)
+    with open(str(source[4]), 'rb') as fin:
+        riv_shape = pickle.load(fin)
+    with open(str(source[5]), 'r') as fin:
         proj4str = fin.read().strip()
     proj = pyproj.Proj(proj4str)
 
@@ -473,7 +479,7 @@ def import_rgis_network(source, target, env):
 	    }
 
     minx, maxy = affine_riv * (0,0)
-    maxx, miny = affine_riv * (rivers.shape[1], rivers.shape[0])
+    maxx, miny = affine_riv * (riv_shape[1], riv_shape[0])
 
     G = nx.DiGraph()
     Gclip = nx.DiGraph()

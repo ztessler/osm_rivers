@@ -218,9 +218,11 @@ env.Default(p)
 
 # rasterize
 riv_rast = os.path.join(deltawork, '{0}_riv_rast.tif'.format(delta))
+riv_affine = os.path.join(deltawork, '{0}_riv_affine.pkl'.format(delta))
+riv_shape = os.path.join(deltawork, '{0}_riv_shape.pkl'.format(delta))
 myCommand(
         source=merged_vec,
-        target=riv_rast,
+        target=[riv_rast, riv_affine, riv_shape],
         action=lib.rasterize_riv,
         imsize=1000)
 p = env.Command(
@@ -345,7 +347,7 @@ env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
                 flowdir.format(ext='tif'),
-                bifur_grid,
+                riv_affine, riv_shape,
                 proj4str],
         target=[network, networkdelta, nupstream, ndownstream, nodepositions],
         action=lib.import_rgis_network)
