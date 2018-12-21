@@ -1294,7 +1294,7 @@ def remap_riv_network(source, target, env):
         yp = yriv - ynode
         #dist = np.sqrt(xp**2 + yp**2)
         #halfres = .5 * maxresolution
-        widehalfres = .6 * maxresolution
+        widehalfres = .55 * maxresolution
         # nearness determined by star-shape region around node. half resolution dist ensures all
         # gridlines get captured, but second terms chops out region in middle. makes diagonal
         # connections easier
