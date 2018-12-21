@@ -1466,8 +1466,10 @@ def remap_riv_network(source, target, env):
                         if discharges[neighbor_node] is None:
                             discharges[neighbor_node] = .1 * total_discharge
                 total_discharge = sum(list(discharges.values()))
-                for neighbor_node in G.succ[from_node]:
-                    dis_frac = discharges[neighbor_node] / total_discharge
+                dis_fracs = [np.round(discharges[dnode]/total_discharge * 1000)/1000 for dnode in G.succ[from_node]]
+                assert sum(dis_fracs) == 1.0
+                for neighbor_node, dis_frac in zip(G.succ[from_node], dis_fracs):
+                    #dis_frac = discharges[neighbor_node] / total_discharge
                     from_cell = cellid[nodes.index(from_node)]
                     neighbor_cell = cellid[nodes.index(neighbor_node)]
                     if (from_node, neighbor_node) in Gorig.edges:
@@ -1475,7 +1477,7 @@ def remap_riv_network(source, target, env):
                         if (from_cell, neighbor_cell, 0) not in wrote:
                             csvwriter.writerow([from_cell, neighbor_cell, 0])
                             wrote.append((from_cell, neighbor_cell, 0))
-                    if (from_cell, neighbor_cell, 1) not in wrote: # use 1 to avoid round-off errors. will revisit some edges if both bifur branches are new. neighbor_cell will be computed twice, but dont want to write twice
+                    if (from_cell, neighbor_cell, 1) not in wrote: # use 1 as sentinel to avoid round-off errors. will revisit some edges if both bifur branches are new. neighbor_cell will be computed twice, but dont want to write twice
                         csvwriter.writerow([from_cell, neighbor_cell, dis_frac])
                         wrote.append((from_cell, neighbor_cell, 1))
 
