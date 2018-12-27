@@ -364,7 +364,7 @@ myCommand(
 node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
 riv_dist_to_coast = os.path.join(domainwork, 'riv_dist_to_coast.pkl')
 myCommand(
-        source=[networkdelta, bifur_grid, clipped_coastline],
+        source=[networkdelta, bifur_grid, clipped_coastline, clipped_coast],
         target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
@@ -387,10 +387,18 @@ myCommand(
         target=[next_rivpts, prev_rivpts],
         action=lib.next_prev_pts)
 
+# extend rivers (at coastal end) out toward/past coastline, some initial rgis networks extend
+# farther out to direct estuary flow.
+river_adj1 = os.path.join(domainwork, '{0}_river_adj_to_network.1.tif'.format(delta))
+myCommand(
+        source=[bifur_grid, next_rivpts, prev_rivpts, riv_dist_to_coast, clipped_coastline, clipped_coast],
+        target=river_adj1,
+        action=lib.extend_rivers_to_coast)
+
 # final river version, cleaned and merged network. put in domainwork dir since depends on rgis res
 river_adj = os.path.join(domainwork, '{0}_river_adj_to_network.tif'.format(delta))
 myCommand(
-        source=[bifur_grid, nupstream, ndownstream, nodepositions],
+        source=[river_adj1, nupstream, ndownstream, nodepositions],
         target=river_adj,
         action=lib.merge_riv_path_to_mainstem)
 
@@ -403,7 +411,7 @@ env.Command(
 node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
 riv_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
 myCommand(
-        source=[networkdelta, bifur_adj, clipped_coastline],
+        source=[networkdelta, bifur_adj, clipped_coastline, clipped_coast],
         target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 

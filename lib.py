@@ -13,7 +13,8 @@ import cartopy.crs as ccrs
 import networkx as nx
 import skimage.morphology as morph
 import skimage.draw
-from scipy.ndimage.filters import generic_filter
+from scipy.ndimage.filters import generic_filter, gaussian_filter
+from scipy.interpolate import griddata
 from netCDF4 import Dataset
 import pyproj
 import itertools
@@ -779,6 +780,7 @@ def calc_dist_to_coast(source, target, env):
         rivers = rast.read(1)
         affine = rast.transform
     coastline = geopandas.read_file(str(source[2])).loc[0,'geometry']
+    coast = geopandas.read_file(str(source[3])).loc[0,'geometry']
 
     # calc node_dist_to_coast
     nodes = list(G.nodes())
@@ -789,6 +791,7 @@ def calc_dist_to_coast(source, target, env):
     wet = np.where(rivers > 0)
     positions = geopandas.GeoSeries([sgeom.Point(affine * (i,j)) for j,i in zip(*wet)], index=zip(*wet))
     riv_dist_to_coast = positions.distance(coastline)
+    riv_dist_to_coast[~positions.intersects(coast)] *= -1 # if river goes past coastline into ocean, make those distances negative so direction-finding still works
 
     node_dist_to_coast.to_pickle(str(target[0]))
     riv_dist_to_coast.to_pickle(str(target[1]))
@@ -1181,8 +1184,7 @@ def merge_riv_path_to_mainstem(source, target, env):
         # draw new river in straight line from closest river approach to head_node
         head_node_ji = tuple(head_node_ij[::-1])
         rowidx, colidx = skimage.draw.line(*mindist_rivpt, *head_node_ji)
-        rivers[rowidx, colidx] = 2
-        rivers[head_node_ji] = 1
+        rivers[rowidx, colidx] = 1
         return rivers
 
     score = np.array(nupstream) * np.array(ndownstream) # maximized at "center" of mainstem, which we assume is upstream of the delta boundary
@@ -1205,6 +1207,118 @@ def merge_riv_path_to_mainstem(source, target, env):
 
     with rasterio.open(str(target[0]), 'w', **meta) as rast:
         rast.write(rivers, 1)
+    return 0
+
+
+def extend_rivers_to_coast(source, target, env):
+    with rasterio.open(str(source[0]), 'r') as rast:
+        bifurs = rast.read(1)
+        affine = rast.transform
+        meta = rast.meta.copy()
+    with open(str(source[1]), 'rb') as fin:
+        next_rivpt = pickle.load(fin)
+    with open(str(source[2]), 'rb') as fin:
+        prev_rivpt = pickle.load(fin)
+    with open(str(source[3]), 'rb') as fin:
+        rivdisttocoast = pickle.load(fin)
+    coastline = geopandas.read_file(str(source[4]))['geometry']
+    coast = geopandas.read_file(str(source[5]))
+
+    polys = coast.explode()
+    ind = polys.area.values.argmax()
+    coast = polys.iloc[ind:ind+1]
+
+    lines = coastline.explode()
+    ind = lines.length.values.argmax()
+    coastline = lines.iloc[ind:ind+1]
+
+    coastbuff = coastline.buffer(20000)
+    coastbuff_boundary = coastbuff.boundary
+    inside = coastbuff_boundary.intersection(coast)
+    outside = coastbuff_boundary.difference(inside)
+
+    validzone = np.zeros_like(bifurs) * np.nan
+    rfeatures.rasterize(((geom, 1) for geom in coastbuff), out_shape=validzone.shape,
+            out=validzone, transform=affine, all_touched=True)
+
+    maxdepth = 20
+    depths = np.zeros_like(bifurs) * np.nan
+    rfeatures.rasterize(((geom, -maxdepth) for geom in inside), out_shape=depths.shape,
+            out=depths, transform=affine, all_touched=True)
+    rfeatures.rasterize(((geom, 0) for geom in coastline), out_shape=depths.shape,
+            out=depths, transform=affine, all_touched=True)
+    rfeatures.rasterize(((geom, maxdepth) for geom in outside), out_shape=depths.shape,
+            out=depths, transform=affine, all_touched=True)
+
+    xs = np.arange(depths.shape[1])
+    ys = np.arange(depths.shape[0])
+    X, Y = np.meshgrid(xs, ys)
+    valid = np.isfinite(depths)
+    depthsgood = depths[valid]
+    Xgood = X[valid]
+    Ygood = Y[valid]
+    depths = griddata(np.c_[Xgood, Ygood], depthsgood, (X, Y), method='linear')
+    depths[np.isnan(depths)] = maxdepth
+    depths = gaussian_filter(depths, 5, mode='nearest')
+    depths[np.isnan(validzone)] = np.nan
+
+    grad_y, grad_x = np.gradient(depths)
+    grad_y[np.isclose(grad_y, 0)] = 0
+    grad_x[np.isclose(grad_x, 0)] = 0
+    angle = np.arctan2(grad_y, grad_x)
+    angle[np.isnan(depths)] = np.nan
+
+    endpoints = np.where(bifurs==1)
+    outlets = [p for p in zip(*endpoints) if ((not next_rivpt[p]) and (rivdisttocoast[p] < 20000))]
+    rivers = (bifurs > 0).astype(bifurs.dtype)
+
+    for rivj, rivi in outlets:
+        # in case no gradient at start, start with initial dj,di leading away from prev
+        prevjs = [prev_rivpt[rivj, rivi][0][0]]
+        previs = [prev_rivpt[rivj, rivi][0][1]]
+        dj = rivj - prevjs[-1]
+        di = rivi - previs[-1]
+        rivj_i = rivj
+        rivi_i = rivi
+        rivj, rivi = rivj+.5, rivi+.5
+        while (0<=rivj_i<angle.shape[0] and
+               0<=rivi_i<angle.shape[1] and
+               np.isfinite(angle[rivj_i,rivi_i])):
+            # check all neighbors of potential new point
+            # if any (other than this river's prevs) is already a river, break
+            # dont want to connect to any other branchs
+            collision = False
+            for dj in [-1,0,1]:
+                for di in [-1,0,1]:
+                    if dj == di == 0:
+                        continue
+                    if (rivj_i+dj) in prevjs and (rivi_i+di) in previs:
+                        continue
+                    if rivers[rivj_i+dj, rivi_i+di]:
+                        collision = True
+            if collision:
+                break
+            rivers[rivj_i,rivi_i] = 1
+            rivxy = affine * (rivi, rivj)
+            a = angle[rivj_i,rivi_i]
+            if (grad_y[rivj_i, rivi_i]!= 0) or (grad_x[rivj_i, rivi_i]!= 0):
+                # only update if gradient is not zero
+                # otherwise just continue in last direction
+                dj = np.sin(a)
+                di = np.cos(a)
+            prevjs.append(rivj_i)
+            previs.append(rivi_i)
+            rivj += dj
+            rivi += di
+            rivj_i = int(round(rivj))
+            rivi_i = int(round(rivi))
+
+    # clean up any multipixel corners, turns
+    rivers = (rivers>0)
+    rivers = morph.skeletonize(rivers).astype(np.uint8)
+
+    with rasterio.open(str(target[0]), 'w', **meta) as out:
+        out.write(rivers, 1)
     return 0
 
 
