@@ -121,10 +121,12 @@ myCommand(
         action=lib.project_and_clip_osm_waterways)
 
 clipped_coastline = os.path.join(deltawork,
+        '{0}_coastline_clipped/{0}_coastline_clipped.shp'.format(delta))
+clipped_coast = os.path.join(deltawork,
         '{0}_coast_clipped/{0}_coast_clipped.shp'.format(delta))
 myCommand(
         source=[GSHHSshp, deltashp, proj4str],
-        target=clipped_coastline,
+        target=[clipped_coastline, clipped_coast],
         action=lib.project_and_clip_coastline)
 
 p = myCommand(

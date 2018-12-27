@@ -105,12 +105,15 @@ def project_and_clip_coastline(source, target, env):
     #if isinstance(coastbuff_poly, sgeom.MultiPolygon):
         #i = np.argmax([p.area for p in coastbuff_poly])
         #coastbuff_poly = coastbuff_poly[i]
-    coastline = coastbuff_poly.buffer(-2000).boundary
+    coastpoly = coastbuff_poly.buffer(-2000)
+    coastline = coastpoly.boundary
 
     deltahull_buff = deltahull.buffer(50000).unary_union
+    coast_clip = coastpoly.intersection(deltahull_buff)
     coastline_clip = coastline.intersection(deltahull_buff)
 
-    geopandas.GeoSeries(coastline_clip).to_file(str(target[0]))
+    geopandas.GeoSeries(coastline_clip, crs=proj4_init).to_file(str(target[0]))
+    geopandas.GeoSeries(coast_clip, crs=proj4_init).to_file(str(target[1]))
     return 0
 
 
