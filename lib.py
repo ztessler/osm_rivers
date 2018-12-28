@@ -1559,6 +1559,7 @@ def remap_riv_network(source, target, env):
             if newedge not in Gorig.edges:
                 # make new link
                 from_node, to_node = newedge
+                from_cell, to_cell = [cellid[nodes.index(n)] for n in newedge]
                 discharges = {}
                 total_discharge = 0
                 for neighbor_node in G.succ[from_node]:
@@ -1591,7 +1592,13 @@ def remap_riv_network(source, target, env):
                             discharges[neighbor_node] = .1 * total_discharge
                 total_discharge = sum(list(discharges.values()))
                 dis_fracs = [np.round(discharges[dnode]/total_discharge * 1000)/1000 for dnode in G.succ[from_node]]
-                assert sum(dis_fracs) == 1.0
+                if sum(dis_fracs) != 1.0:
+                    print('Discharge fractions from cell {0}: {1} (sum: {2})'.format(from_cell, dis_fracs, sum(dis_fracs)))
+                    ind = np.argmin(dis_fracs)
+                    smallest = dis_fracs.pop(ind)
+                    replacement = np.round((1 - sum(dis_fracs)) * 1000) / 1000
+                    dis_fracs.insert(ind, replacement)
+                    print(' Adjusted frac {0} to {1}'.format(smallest, replacement))
                 for neighbor_node, dis_frac in zip(G.succ[from_node], dis_fracs):
                     #dis_frac = discharges[neighbor_node] / total_discharge
                     from_cell = cellid[nodes.index(from_node)]
