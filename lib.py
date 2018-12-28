@@ -1390,6 +1390,9 @@ def remap_riv_network(source, target, env):
     while to_visit:
         (rivj, rivi), last_node_i, branch = to_visit.pop(0)
         xy = affine * (rivi,rivj)
+        xy2 = affine * (rivi+1,rivj)
+        xy3 = affine * (rivi,rivj+1)
+        pixelres = max(abs(xy2[0]-xy[0]), abs(xy3[1]-xy[1]))
         if last_node_i is not None:
             last_node = nodes[last_node_i]
             last_cell = cellid[last_node_i]
@@ -1404,12 +1407,16 @@ def remap_riv_network(source, target, env):
         next_node = nearestnode[(rivj,rivi)]
         next_node_i = nodes.index(next_node)
         next_cell = cellid[next_node_i]
+        if last_node is not None:
+            isdiag = int(abs(next_node[0]-last_node[0])==1 and abs(next_node[1]-last_node[1])==1)
+        else:
+            isdiag = 0
 
         xriv, yriv = xy
         xnode, ynode = positions[next_node_i]
         xp = xriv - xnode
         yp = yriv - ynode
-        #dist = np.sqrt(xp**2 + yp**2)
+        dist = np.sqrt(xp**2 + yp**2)
         #halfres = .5 * maxresolution
         widehalfres = .55 * maxresolution
         # nearness determined by star-shape region around node. half resolution dist ensures all
@@ -1424,10 +1431,16 @@ def remap_riv_network(source, target, env):
         # or a star with straight edges, gathers a bit more of the center than first star method
         #riv_near_node = ((dist <= halfres) and
                          #((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
+        # squished star
         riv_near_node = (((yp + 2*xp <  widehalfres) or (yp + xp/2 <  widehalfres/2)) and
                          ((yp - 2*xp > -widehalfres) or (yp - xp/2 > -widehalfres/2)) and
                          ((yp + 2*xp > -widehalfres) or (yp + xp/2 > -widehalfres/2)) and
                          ((yp - 2*xp <  widehalfres) or (yp - xp/2 <  widehalfres/2)))
+        # small circles with legs along boundary
+        riv_near_node = ((dist < ((.3 * maxresolution) * (1 + isdiag * (np.sqrt(2) - 1)))) or # within small circle around next_node (larger for diagonal nextnode)
+                         (abs(yp) < (2 * pixelres)) or # within 2 river pixels of nodeline
+                         (abs(xp) < (2 * pixelres))    # within 2 river pixels of nodeline
+                         )
         valid_next_node = (riv_near_node and # helps reduce zig-zag
                            ((last_node is None) or
                                abs(next_node[0]-last_node[0]) <= 1) and # dont jump past neighbor cell
