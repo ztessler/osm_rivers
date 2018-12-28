@@ -1428,9 +1428,16 @@ def remap_riv_network(source, target, env):
                          ((yp - 2*xp > -widehalfres) or (yp - xp/2 > -widehalfres/2)) and
                          ((yp + 2*xp > -widehalfres) or (yp + xp/2 > -widehalfres/2)) and
                          ((yp - 2*xp <  widehalfres) or (yp - xp/2 <  widehalfres/2)))
+        valid_next_node = (riv_near_node and # helps reduce zig-zag
+                           ((last_node is None) or
+                               abs(next_node[0]-last_node[0]) <= 1) and # dont jump past neighbor cell
+                           ((last_node is None) or
+                               abs(next_node[1]-last_node[1]) <= 1))   #  (possible along coastline)
+
 
         if ((next_node != last_node) and # moving to new node
-                (riv_near_node)):        # helps reduce zig-zag
+                valid_next_node):
+
             if ((next_cell in edits) and
                    (last_cell in edits[next_cell]) and
                    (branch in edits[next_cell][last_cell]) and
@@ -1508,7 +1515,7 @@ def remap_riv_network(source, target, env):
                                 G.edges[corner1_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
                             edits[corner1_cell][next_cell][branch] = True # anything other than None
 
-        elif (not riv_near_node): #or
+        elif (not valid_next_node): #or
               #(next_node in nx.ancestors(G, last_node))):
             # not stepping to next node, skip it by waiting until a different node is closest to river
             # next visited rivpt will still be attached to last_node
