@@ -513,12 +513,12 @@ def import_rgis_network(source, target, env):
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
         G.node[node]['downstream'] = len(nx.descendants(G, node))
-    nx.write_yaml(G, str(target[0]))
+    nx.write_gpickle(G, str(target[0]))
 
     for node in Gclip.nodes():
         Gclip.node[node]['upstream'] = len(nx.ancestors(G, node)) # use numbers from full network
         Gclip.node[node]['downstream'] = len(nx.descendants(G, node)) # use numbers from full network
-    nx.write_yaml(Gclip, str(target[1]))
+    nx.write_gpickle(Gclip, str(target[1]))
 
     upstream = {node: Gclip.node[node]['upstream'] for node in Gclip.nodes()}
     downstream = {node: Gclip.node[node]['downstream'] for node in Gclip.nodes()}
@@ -533,7 +533,7 @@ def import_rgis_network(source, target, env):
 
 
 def convert_network_to_graphml(source, target, env):
-    G = nx.read_yaml(str(source[0]))
+    G = nx.read_gpickle(str(source[0]))
     nodes = list(G.nodes)
     for node in nodes:
         G.nodes[node]['basin'] = int(G.nodes[node]['basin'])
@@ -622,7 +622,7 @@ def find_bifurs(source, target, env):
 
 
 def plot_network_map(source, target, env):
-    G = nx.read_yaml(str(source[0]))
+    G = nx.read_gpickle(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
         bifurs_pre = (rast.read(1) > 0).astype(np.int)
         affine = rast.transform
@@ -745,7 +745,7 @@ def _find_nearest_node_i(rivxy, positions, nodemask):
 
 
 def find_nearest_nodes_to_riv(source, target, env):
-    G = nx.read_yaml(str(source[0]))
+    G = nx.read_gpickle(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
@@ -775,7 +775,7 @@ def find_nearest_nodes_to_riv(source, target, env):
 
 
 def calc_dist_to_coast(source, target, env):
-    G = nx.read_yaml(str(source[0]))
+    G = nx.read_gpickle(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
@@ -1323,7 +1323,7 @@ def extend_rivers_to_coast(source, target, env):
 
 
 def remap_riv_network(source, target, env):
-    G = nx.read_yaml(str(source[0]))
+    G = nx.read_gpickle(str(source[0]))
     Gorig = G.copy()
     with rasterio.open(str(source[1]), 'r') as rast:
         rivers = rast.read(1)
@@ -1634,7 +1634,7 @@ def remap_riv_network(source, target, env):
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
         G.node[node]['downstream'] = len(nx.descendants(G, node))
-    nx.write_yaml(G, str(target[1]))
+    nx.write_gpickle(G, str(target[1]))
 
     with open(str(target[2]), 'w') as fout:
         for outlet in sorted(outlets):

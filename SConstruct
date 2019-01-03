@@ -340,8 +340,8 @@ for (path, varname) in [(cellid, 'CellID'),
             target=path.format(ext='tif'),
             action=lib.georef_nc)
 
-network = os.path.join(domainwork, '{0}_{1}_network.nx.yaml'.format(domain, STNres))
-networkdelta = os.path.join(domainwork, '{0}_{1}_{2}_network_delta.nx.yaml'.format(domain, delta, STNres))
+network = os.path.join(domainwork, '{0}_{1}_network.nx.pkl'.format(domain, STNres))
+networkdelta = os.path.join(domainwork, '{0}_{1}_{2}_network_delta.nx.pkl'.format(domain, delta, STNres))
 nupstream = os.path.join(domainwork, 'nupstream.pkl'.format(domain, delta, STNres))
 ndownstream = os.path.join(domainwork, 'ndownstream.pkl'.format(domain, delta, STNres))
 nodepositions = os.path.join(domainwork, 'nodepositions.pkl'.format(domain, delta, STNres))
@@ -454,7 +454,7 @@ myCommand(
         action=lib.find_head_rivpt)
 
 bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
-bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.yaml'.format(domain, delta, STNres))
+bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.pkl'.format(domain, delta, STNres))
 bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
 b = myCommand(
         source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
