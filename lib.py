@@ -822,6 +822,7 @@ def find_river_segments(source, target, env):
     segments = defaultdict(list)
     fullsegments = {}
     maxsegi = cursegi
+    nj, ni = rivers.shape
     while tovisit:
         j, i, cursegi = tovisit.pop(0)
         segments[cursegi].append((j,i))
@@ -837,6 +838,8 @@ def find_river_segments(source, target, env):
                     continue
                 j2 = j + dj
                 i2 = i + di
+                if j2 < 0 or j2 >= nj or i2 < 0 or i2 >= ni:
+                    continue
 
                 if rivers[j2,i2] > 0:
                     if (rivers[j,i]<3) and ((j,i) in branchpoints) and ((j2,i2) in branchpoints):
@@ -1281,8 +1284,9 @@ def extend_rivers_to_coast(source, target, env):
         rivj_i = rivj
         rivi_i = rivi
         rivj, rivi = rivj+.5, rivi+.5
-        while (0<=rivj_i<angle.shape[0] and
-               0<=rivi_i<angle.shape[1] and
+        nj, ni = angle.shape
+        while (0<=rivj_i<nj and
+               0<=rivi_i<ni and
                np.isfinite(angle[rivj_i,rivi_i])):
             # check all neighbors of potential new point
             # if any (other than this river's prevs) is already a river, break
@@ -1292,9 +1296,13 @@ def extend_rivers_to_coast(source, target, env):
                 for di in [-1,0,1]:
                     if dj == di == 0:
                         continue
-                    if (rivj_i+dj) in prevjs and (rivi_i+di) in previs:
+                    rivj2 = rivj_i+dj
+                    rivi2 = rivi_i+di
+                    if rivj2 in prevjs and rivi2 in previs:
                         continue
-                    if rivers[rivj_i+dj, rivi_i+di]:
+                    if rivj2 < 0 or rivj2 >= nj or rivi2 < 0 or rivi2 >= ni:
+                        continue
+                    if rivers[rivj2, rivi2]:
                         collision = True
             if collision:
                 break
