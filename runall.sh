@@ -3,7 +3,7 @@
 DELTAs=(Mekong Chao_Phraya Godavari)
 OSMrivers=(vietnam:cambodia thailand india)
 #RESs=(30min 10min 06min 03min 01min)
-RESs=(10min 06min)
+RESs=(03min 10min 06min)
 
 for IDX in ${!DELTAs[@]}
 do
