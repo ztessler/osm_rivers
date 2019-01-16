@@ -16,6 +16,7 @@ do
     done
 
     # build SSEA bifur file
+    mkdir -p output/SSEA/${RES}
     find output/ -path output/SSEA -prune -o -name "*_${RES}_bifurcations.csv" -execdir cat '{}' \+ > output/SSEA/${RES}/SSEA_${RES}_bifurcations.csv
 done
 
