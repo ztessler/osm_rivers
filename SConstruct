@@ -53,6 +53,7 @@ deltafigures = os.path.join('figures', delta)
 domainfigures = os.path.join('figures', domain, delta, STNres)
 
 STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
+SSEAnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/SSEA/{res}/SSEA_Network_{res}.gdbn'.format(res=STNres)
 OSMshps = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 OSMwaterways = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_waterways_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 deltashp = '/Users/ecr/ztessler/data/deltas_LCLUC/maps/{0}_shp/{0}.shp'.format(delta)
@@ -487,3 +488,19 @@ t = myCommand(
         target=bifurnetworkgraphml,
         action=lib.convert_network_to_graphml)
 env.Default(t)
+
+STNcells = os.path.join(domainwork, 'STNnetwork_dbcells.txt')
+env.Command(
+        source=STNnetwork,
+        target=STNcells,
+        action='rgis2table -a DBCells $SOURCE > $TARGET')
+SSEAcells = os.path.join(domainwork, 'SSEAnetwork_dbcells.txt')
+env.Command(
+        source=SSEAnetwork,
+        target=SSEAcells,
+        action='rgis2table -a DBCells $SOURCE > $TARGET')
+SSEA_bifurs = os.path.join(output, '{0}_{1}_{2}_SSEA_bifurcations.csv'.format(domain, delta, STNres))
+env.Command(
+        source=[STNcells, SSEAcells, bifurs],
+        target=SSEA_bifurs,
+        action=lib.convert_bifur_cellids_to_SSEA)

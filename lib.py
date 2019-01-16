@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import palettable
+import pandas
 import geopandas
 import shapely.geometry as sgeom
 import rasterio
@@ -1648,4 +1649,18 @@ def remap_riv_network(source, target, env):
         for outlet in sorted(outlets):
             fout.write(str(outlet)+'\n')
 
+    return 0
+
+
+def convert_bifur_cellids_to_SSEA(source, target, env):
+    stn = pandas.read_csv(str(source[0]), sep='\t', header=0)[['CellXCoord', 'CellYCoord', 'CellID']]
+    ssea = pandas.read_csv(str(source[1]), sep='\t', header=0)[['CellXCoord', 'CellYCoord', 'CellID']]
+    stnbifurs = pandas.read_csv(str(source[2]), header=None, names=['FromCell_stn', 'ToCell_stn', 'frac'])
+
+    cells = stn.set_index(['CellXCoord', 'CellYCoord']).join(ssea.set_index(['CellXCoord', 'CellYCoord']), how='left', lsuffix='_stn', rsuffix='_ssea')
+    stnbifurs = stnbifurs.join(cells.set_index('CellID_stn'), on='FromCell_stn', how='left')
+    stnbifurs = stnbifurs.join(cells.set_index('CellID_stn'), on='ToCell_stn', how='left', lsuffix='_from', rsuffix='_to')
+
+    sseabifurs = stnbifurs[['CellID_ssea_from', 'CellID_ssea_to', 'frac']]
+    sseabifurs.to_csv(str(target[0]),index=False,header=False)
     return 0
