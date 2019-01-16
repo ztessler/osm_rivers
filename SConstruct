@@ -498,7 +498,8 @@ env.Command(
         target=SSEAcells,
         action='rgis2table -a DBCells $SOURCE > $TARGET')
 SSEA_bifurs = os.path.join(output, '{0}_{1}_SSEA_bifurcations.csv'.format(delta, STNres))
-env.Command(
+b = env.Command(
         source=[STNcells, SSEAcells, bifurs],
         target=SSEA_bifurs,
         action=lib.convert_bifur_cellids_to_SSEA)
+env.Default(b)
