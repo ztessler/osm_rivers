@@ -39,20 +39,18 @@ def myCommand(target, source, action, **kwargs):
 
 GHAASBIN = env['ENV']['GHAASBIN']
 
-domain = os.environ.get('DOMAIN', 'Mekong')
 delta = os.environ.get('DELTA', 'Mekong')
 OSMrivers = os.environ.get('OSMriver', 'vietnam:cambodia').split(':')
 STNres = os.environ.get('STNres', '06min')
 INSPECTfig = os.environ.get('INSPECTfig', None)
 
-deltawork = os.path.join('work', delta) # SSEA domain can reuse some single-domain files
-domainwork = os.path.join('work', domain, delta, STNres)
-domain_nores_work = os.path.join('work', domain, delta)
-output = os.path.join('output', domain, delta, STNres)
-deltafigures = os.path.join('figures', delta)
-domainfigures = os.path.join('figures', domain, delta, STNres)
+work = os.path.join('work', delta)
+reswork = os.path.join('work', delta, STNres)
+output = os.path.join('output', delta, STNres)
+figures = os.path.join('figures', delta)
+resfigures = os.path.join('figures', delta, STNres)
 
-STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{domain}/{res}/{domain}_Network_{res}.gdbn'.format(domain=domain, res=STNres)
+STNnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/{delta}/{res}/{delta}_Network_{res}.gdbn'.format(delta=delta, res=STNres)
 SSEAnetwork = '/Users/ecr/ztessler/projects/CHART/WBM/tools/buildNetwork/output/SSEA/{res}/SSEA_Network_{res}.gdbn'.format(res=STNres)
 OSMshps = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_water_a_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
 OSMwaterways = ['/Users/ecr/ztessler/data/OpenStreetMaps/Geofabrik/{0}/gis_osm_waterways_free_1.shp'.format(OSMriver) for OSMriver in OSMrivers]
@@ -71,12 +69,12 @@ params = {
 
 # merge multiple country-level data if necessary
 if len(OSMshps) > 1:
-    merged_shps = os.path.join(domain_nores_work, 'merged_rivs.shp')
+    merged_shps = os.path.join(work, 'merged_rivs.shp')
     env.Command(
             source=OSMshps,
             target=merged_shps,
             action='ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET $SOURCES')
-    merged_waterways = os.path.join(domain_nores_work, 'merged_waterways.shp')
+    merged_waterways = os.path.join(work, 'merged_waterways.shp')
     env.Command(
             source=OSMwaterways,
             target=merged_waterways,
@@ -85,45 +83,45 @@ else:
     merged_shps = OSMshps[0]
     merged_waterways = OSMwaterways[0]
 
-proj4str = os.path.join(deltawork, '{}_proj4.txt'.format(delta))
+proj4str = os.path.join(work, '{}_proj4.txt'.format(delta))
 myCommand(
         source=deltashp,
         target=proj4str,
         action=lib.set_projection)
 
-grwl_shp_list = os.path.join(deltawork, 'grwl_shp_list.txt')
+grwl_shp_list = os.path.join(work, 'grwl_shp_list.txt')
 grwl_shps = glob.glob(GRWLshps)
 myCommand(
         source=[deltashp]+grwl_shps,
         target=grwl_shp_list,
         action=lib.find_grwl_list)
-merged_GRWL_ll = os.path.join(deltawork, '{0}_grwl_ll.shp'.format(delta))
+merged_GRWL_ll = os.path.join(work, '{0}_grwl_ll.shp'.format(delta))
 myCommand(
         source=[grwl_shp_list]+grwl_shps,
         target=merged_GRWL_ll,
         action='cat ${SOURCES[0]} | xargs ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET')
-merged_GRWL = os.path.join(deltawork, '{0}_grwl.shp'.format(delta))
+merged_GRWL = os.path.join(work, '{0}_grwl.shp'.format(delta))
 myCommand(
         source=[proj4str, merged_GRWL_ll],
         target=merged_GRWL,
         action='cat ${SOURCES[0]} | xargs -I {} ogr2ogr -t_srs {} $TARGET ${SOURCES[1]}')
 
 # project and clip river vectors to delta
-clipped_vec = os.path.join(deltawork, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
+clipped_vec = os.path.join(work, '{0}_riv_clipped/{0}_riv_clipped.shp'.format(delta))
 myCommand(
         source=[merged_shps, deltashp, proj4str],
         target=clipped_vec,
         action=lib.project_and_clip_osm_rivers)
-clipped_ww_vec = os.path.join(deltawork, '{0}_ww_clipped/{0}_ww_clipped.shp'.format(delta))
-ww_proj4str = os.path.join(deltawork, '{}_ww_proj4.txt'.format(delta))
+clipped_ww_vec = os.path.join(work, '{0}_ww_clipped/{0}_ww_clipped.shp'.format(delta))
+ww_proj4str = os.path.join(work, '{}_ww_proj4.txt'.format(delta))
 myCommand(
         source=[merged_waterways, deltashp, proj4str],
         target=clipped_ww_vec,
         action=lib.project_and_clip_osm_waterways)
 
-clipped_coastline = os.path.join(deltawork,
+clipped_coastline = os.path.join(work,
         '{0}_coastline_clipped/{0}_coastline_clipped.shp'.format(delta))
-clipped_coast = os.path.join(deltawork,
+clipped_coast = os.path.join(work,
         '{0}_coast_clipped/{0}_coast_clipped.shp'.format(delta))
 myCommand(
         source=[GSHHSshp, deltashp, proj4str],
@@ -132,53 +130,53 @@ myCommand(
 
 p = myCommand(
         source=clipped_vec,
-        target=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_vec_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_vec_rivs.png'.format(delta)),
+        source=os.path.join(figures, '{}_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 p = myCommand(
         source=clipped_ww_vec,
-        target=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_ww_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_ww_vec_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_ww_vec_rivs.png'.format(delta)),
+        source=os.path.join(figures, '{}_ww_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_ww_vec_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-rivers_ww_vec = os.path.join(deltawork, '{0}_ww_rivers/{0}_ww_rivers.shp'.format(delta))
+rivers_ww_vec = os.path.join(work, '{0}_ww_rivers/{0}_ww_rivers.shp'.format(delta))
 myCommand(
         source=clipped_ww_vec,
         target=rivers_ww_vec,
         action=lib.select_waterway_rivers)
 p = myCommand(
         source=rivers_ww_vec,
-        target=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_ww_rivers_vec_rivs.png'.format(delta)),
+        source=os.path.join(figures, '{}_ww_rivers_vec_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_ww_rivers_vec_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-filtered_rivers_ww_vec = os.path.join(deltawork,'{0}_filtered_ww_rivers/{0}_filtered_ww_rivers.shp'.format(delta))
+filtered_rivers_ww_vec = os.path.join(work,'{0}_filtered_ww_rivers/{0}_filtered_ww_rivers.shp'.format(delta))
 p = myCommand(
         source=rivers_ww_vec,
         target=filtered_rivers_ww_vec,
         action=lib.filter_waterway_rivers,
         minwaterway=params[delta]['minwaterway'])
 
-thinned_vec = os.path.join(deltawork, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
+thinned_vec = os.path.join(work, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
 myCommand(
         source=clipped_vec,
         target=thinned_vec,
@@ -189,17 +187,17 @@ myCommand(
         #minhole=params[delta]['minhole'])
 p = myCommand(
         source=thinned_vec,
-        target=os.path.join(deltafigures, '{}_vec_thinned_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_thinned_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_vec_thinned_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_vec_thinned_rivs.png'.format(delta)),
+        source=os.path.join(figures, '{}_vec_thinned_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_thinned_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-merged_vec = os.path.join(deltawork, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
+merged_vec = os.path.join(work, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
 myCommand(
         source=[thinned_vec, filtered_rivers_ww_vec],
         target=merged_vec,
@@ -207,22 +205,22 @@ myCommand(
         buff=params[delta]['thinning'])
 p = myCommand(
         source=merged_vec,
-        target=os.path.join(deltafigures, '{}_vec_merged_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_merged_rivs_full.png'.format(delta)),
         action=[lib.plot_vec_rivs,
                 'convert -trim $TARGET $TARGET'])
 env.Default(p)
 p = myCommand(
-        source=os.path.join(deltafigures, '{}_vec_merged_rivs_full.png'.format(delta)),
-        target=os.path.join(deltafigures, '{}_vec_merged_rivs.png'.format(delta)),
+        source=os.path.join(figures, '{}_vec_merged_rivs_full.png'.format(delta)),
+        target=os.path.join(figures, '{}_vec_merged_rivs.png'.format(delta)),
         action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 
 
 # rasterize
-riv_rast = os.path.join(deltawork, '{0}_riv_rast.tif'.format(delta))
-riv_affine = os.path.join(deltawork, '{0}_riv_affine.pkl'.format(delta))
-riv_shape = os.path.join(deltawork, '{0}_riv_shape.pkl'.format(delta))
+riv_rast = os.path.join(work, '{0}_riv_rast.tif'.format(delta))
+riv_affine = os.path.join(work, '{0}_riv_affine.pkl'.format(delta))
+riv_shape = os.path.join(work, '{0}_riv_shape.pkl'.format(delta))
 myCommand(
         source=merged_vec,
         target=[riv_rast, riv_affine, riv_shape],
@@ -230,12 +228,12 @@ myCommand(
         imsize=1000)
 p = env.Command(
         source=riv_rast,
-        target=os.path.join(deltafigures, '{}_riv_rast.0.png').format(delta),
+        target=os.path.join(figures, '{}_riv_rast.0.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 # skeletonize raster
-riv_skel = os.path.join(deltawork, '{0}_riv_skeleton.tif'.format(delta))
+riv_skel = os.path.join(work, '{0}_riv_skeleton.tif'.format(delta))
 myCommand(
         source=riv_rast,
         target=riv_skel,
@@ -244,12 +242,12 @@ myCommand(
         holethresh=1000)
 p = env.Command(
         source=riv_skel,
-        target=os.path.join(deltafigures, '{}_riv_skel.1.png').format(delta),
+        target=os.path.join(figures, '{}_riv_skel.1.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 # drop small rivers
-riv_dropped_small = os.path.join(deltawork, '{0}_riv_dropped_pieces.tif'.format(delta))
+riv_dropped_small = os.path.join(work, '{0}_riv_dropped_pieces.tif'.format(delta))
 myCommand(
         source=riv_skel,
         target=riv_dropped_small,
@@ -257,50 +255,50 @@ myCommand(
         n=1)
 p = env.Command(
         source=riv_dropped_small,
-        target=os.path.join(deltafigures, '{}_riv_dropped_small.2.png').format(delta),
+        target=os.path.join(figures, '{}_riv_dropped_small.2.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
-bifur_grid1 = os.path.join(deltawork,'{0}_bifurs.1.tif'.format(delta))
+bifur_grid1 = os.path.join(work,'{0}_bifurs.1.tif'.format(delta))
 env.Command(
         source=riv_dropped_small,
         target=bifur_grid1,
         action=lib.find_bifurs)
 
-riv_clean1 = os.path.join(deltawork, '{0}_riv_cleaned.1.tif'.format(delta))
+riv_clean1 = os.path.join(work, '{0}_riv_cleaned.1.tif'.format(delta))
 myCommand(
         source=bifur_grid1,
         target=riv_clean1,
         action=lib.trim_short_rivs,
         minlen=params[delta]['minlen'])
 
-bifur_grid2 = os.path.join(deltawork,'{0}_bifurs.2.tif'.format(delta))
+bifur_grid2 = os.path.join(work,'{0}_bifurs.2.tif'.format(delta))
 env.Command(
         source=riv_clean1,
         target=bifur_grid2,
         action=lib.find_bifurs)
 
-segments1 = os.path.join(deltawork, 'river_segments.1.pkl')
+segments1 = os.path.join(work, 'river_segments.1.pkl')
 myCommand(
         source=bifur_grid2,
         target=segments1,
         action=lib.find_river_segments)
 
-riv_clean = os.path.join(deltawork, '{0}_riv_cleaned.tif'.format(delta))
+riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
 myCommand(
         source=[riv_clean1, segments1],
         target=riv_clean,
         action=lib.remove_small_loops,
         minlen=params[delta]['minlen'])
-#bifur_grid = os.path.join(deltawork, '{0}_bifurs.tif'
+#bifur_grid = os.path.join(work, '{0}_bifurs.tif'
 
-bifur_grid = os.path.join(deltawork,'{0}_bifurs.tif'.format(delta))
+bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
 env.Command(
         source=riv_clean,
         target=bifur_grid,
         action=lib.find_bifurs)
 
-segments2 = os.path.join(deltawork, 'river_segments.2.pkl')
+segments2 = os.path.join(work, 'river_segments.2.pkl')
 myCommand(
         source=bifur_grid,
         target=segments2,
@@ -310,21 +308,21 @@ myCommand(
 
 p = env.Command(
         source=riv_clean,
-        target=os.path.join(deltafigures, '{}_riv_clean.3.png').format(delta),
+        target=os.path.join(figures, '{}_riv_clean.3.png').format(delta),
         action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
 env.Default(p)
 
 # add record id column to network cell table
-network = os.path.join(domainwork, '{0}_{1}_network.gdbn'.format(domain, STNres))
+network = os.path.join(reswork, '{0}_network.gdbn'.format(STNres))
 env.Command(
         source=STNnetwork,
         target=network,
         action=os.path.join(GHAASBIN, 'tblAddIdXY') + ' $SOURCE $TARGET')
 
 # import RGIS network
-cellid = os.path.join(domainwork, '{0}_{1}_cellid.{{ext}}'.format(domain, STNres))
-basins = os.path.join(domainwork, '{0}_{1}_basins.{{ext}}'.format(domain, STNres))
-flowdir = os.path.join(domainwork, '{0}_{1}_flowdir.{{ext}}'.format(domain, STNres))
+cellid = os.path.join(reswork, '{0}_cellid.{{ext}}'.format(STNres))
+basins = os.path.join(reswork, '{0}_basins.{{ext}}'.format(STNres))
+flowdir = os.path.join(reswork, '{0}_flowdir.{{ext}}'.format(STNres))
 for (path, varname) in [(cellid, 'CellID'),
                         (basins, 'BasinID'),
                         (flowdir, 'ToCell')]:
@@ -332,7 +330,7 @@ for (path, varname) in [(cellid, 'CellID'),
             source=network,
             target=path.format(ext='nc'),
             action=[
-                os.path.join(GHAASBIN,'netCells2Grid') + ' -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, domain),
+                os.path.join(GHAASBIN,'netCells2Grid') + ' -f {0} -t {0} -u {0} -d {1} $SOURCE ${{TARGET}}.1'.format(varname, delta),
                 os.path.join(GHAASBIN, 'grdRenameLayers') + ' -r 1 XXXX ${TARGET}.1 ${TARGET}.2',
                 os.path.join(GHAASBIN, 'grdDateLayers') + ' -y 1 -e day ${TARGET}.2 ${TARGET}.3',
                 os.path.join(GHAASBIN, 'rgis2netcdf') + ' ${TARGET}.3 $TARGET'])
@@ -341,11 +339,11 @@ for (path, varname) in [(cellid, 'CellID'),
             target=path.format(ext='tif'),
             action=lib.georef_nc)
 
-network = os.path.join(domainwork, '{0}_{1}_network.nx.pkl'.format(domain, STNres))
-networkdelta = os.path.join(domainwork, '{0}_{1}_{2}_network_delta.nx.pkl'.format(domain, delta, STNres))
-nupstream = os.path.join(domainwork, 'nupstream.pkl'.format(domain, delta, STNres))
-ndownstream = os.path.join(domainwork, 'ndownstream.pkl'.format(domain, delta, STNres))
-nodepositions = os.path.join(domainwork, 'nodepositions.pkl'.format(domain, delta, STNres))
+network = os.path.join(reswork, '{0}_{1}_network_fullbasins.nx.pkl'.format(delta, STNres))
+networkdelta = os.path.join(reswork, '{0}_{1}_network_delta.nx.pkl'.format(delta, STNres))
+nupstream = os.path.join(reswork, 'nupstream.pkl')
+ndownstream = os.path.join(reswork, 'ndownstream.pkl')
+nodepositions = os.path.join(reswork, 'nodepositions.pkl')
 env.Command(
         source=[cellid.format(ext='tif'),
                 basins.format(ext='tif'),
@@ -356,33 +354,33 @@ env.Command(
         action=lib.import_rgis_network)
 
 
-nearestnodes1 = os.path.join(domainwork, 'nearestnodes.1.pkl')
+nearestnodes1 = os.path.join(reswork, 'nearestnodes.1.pkl')
 myCommand(
         source=[networkdelta, bifur_grid],
         target=nearestnodes1,
         action=lib.find_nearest_nodes_to_riv)
 
-node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.pkl')
-riv_dist_to_coast = os.path.join(domainwork, 'riv_dist_to_coast.pkl')
+node_dist_to_coast = os.path.join(reswork, 'node_dist_to_coast.pkl')
+riv_dist_to_coast = os.path.join(reswork, 'riv_dist_to_coast.pkl')
 myCommand(
         source=[networkdelta, bifur_grid, clipped_coastline, clipped_coast],
         target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
-head_rivpt = os.path.join(domainwork, 'head_rivpt.1.pkl')
+head_rivpt = os.path.join(reswork, 'head_rivpt.1.pkl')
 myCommand(
         source=[bifur_grid, nearestnodes1, ndownstream, nodepositions],
         target=head_rivpt,
         action=lib.find_head_rivpt)
 
-segments3 = os.path.join(deltawork, 'river_segments.3.pkl')
+segments3 = os.path.join(work, 'river_segments.3.pkl')
 myCommand(
         source=[segments2, bifur_grid, clipped_ww_vec, riv_dist_to_coast],
         target=segments3,
         action=lib.set_segment_flowdir)
 
-next_rivpts = os.path.join(deltawork, 'next_rivpts.pkl')
-prev_rivpts = os.path.join(deltawork, 'prev_rivpts.pkl')
+next_rivpts = os.path.join(work, 'next_rivpts.pkl')
+prev_rivpts = os.path.join(work, 'prev_rivpts.pkl')
 myCommand(
         source=segments3,
         target=[next_rivpts, prev_rivpts],
@@ -390,73 +388,73 @@ myCommand(
 
 # extend rivers (at coastal end) out toward/past coastline, some initial rgis networks extend
 # farther out to direct estuary flow.
-river_adj1 = os.path.join(domainwork, '{0}_river_adj_to_network.1.tif'.format(delta))
+river_adj1 = os.path.join(reswork, '{0}_river_adj_to_network.1.tif'.format(delta))
 myCommand(
         source=[bifur_grid, next_rivpts, prev_rivpts, riv_dist_to_coast, clipped_coastline, clipped_coast],
         target=river_adj1,
         action=lib.extend_rivers_to_coast)
 
-# final river version, cleaned and merged network. put in domainwork dir since depends on rgis res
-river_adj = os.path.join(domainwork, '{0}_river_adj_to_network.tif'.format(delta))
+# final river version, cleaned and merged network. put in reswork dir since depends on rgis res
+river_adj = os.path.join(reswork, '{0}_river_adj_to_network.tif'.format(delta))
 myCommand(
         source=[river_adj1, nupstream, ndownstream, nodepositions],
         target=river_adj,
         action=lib.merge_riv_path_to_mainstem)
 
-bifur_adj = os.path.join(domainwork,'{0}_adj_bifurs.tif'.format(delta))
+bifur_adj = os.path.join(reswork,'{0}_adj_bifurs.tif'.format(delta))
 env.Command(
         source=river_adj,
         target=bifur_adj,
         action=lib.find_bifurs)
 
-node_dist_to_coast = os.path.join(domainwork, 'node_dist_to_coast.1.pkl') # same as other
-riv_dist_to_coast = os.path.join(domainwork, 'riv_adj_dist_to_coast.pkl')
+node_dist_to_coast = os.path.join(reswork, 'node_dist_to_coast.1.pkl') # same as other
+riv_dist_to_coast = os.path.join(reswork, 'riv_adj_dist_to_coast.pkl')
 myCommand(
         source=[networkdelta, bifur_adj, clipped_coastline, clipped_coast],
         target=[node_dist_to_coast, riv_dist_to_coast],
         action=lib.calc_dist_to_coast)
 
-segments4 = os.path.join(domainwork, '{0}_river_segments.4.pkl'.format(delta))
+segments4 = os.path.join(reswork, '{0}_river_segments.4.pkl'.format(delta))
 myCommand(
         source=bifur_adj,
         target=segments4,
         action=lib.find_river_segments)
 
-segments = os.path.join(domainwork, '{0}_river_segments.pkl'.format(delta))
+segments = os.path.join(reswork, '{0}_river_segments.pkl'.format(delta))
 myCommand(
         source=[segments4, bifur_adj, clipped_ww_vec, riv_dist_to_coast],
         target=segments,
         action=lib.set_segment_flowdir)
 
-river_widths = os.path.join(domainwork, '{0}_river_widths.pkl'.format(delta))
+river_widths = os.path.join(reswork, '{0}_river_widths.pkl'.format(delta))
 myCommand(
         source=[segments, bifur_adj, merged_GRWL],
         target=river_widths,
         action=lib.set_segment_widths)
 
-next_rivpts = os.path.join(domainwork, '{0}_next_rivpts.pkl'.format(delta))
-prev_rivpts = os.path.join(domainwork, '{0}_prev_rivpts.pkl'.format(delta))
+next_rivpts = os.path.join(reswork, '{0}_next_rivpts.pkl'.format(delta))
+prev_rivpts = os.path.join(reswork, '{0}_prev_rivpts.pkl'.format(delta))
 myCommand(
         source=segments,
         target=[next_rivpts, prev_rivpts],
         action=lib.next_prev_pts)
 
-nearestnodes = os.path.join(domainwork, '{0}_nearestnodes.pkl'.format(delta))
+nearestnodes = os.path.join(reswork, '{0}_nearestnodes.pkl'.format(delta))
 myCommand(
         source=[networkdelta, bifur_adj],
         target=nearestnodes,
         action=lib.find_nearest_nodes_to_riv)
 
 
-head_rivpt = os.path.join(domainwork, '{0}_head_rivpt.pkl'.format(delta))
+head_rivpt = os.path.join(reswork, '{0}_head_rivpt.pkl'.format(delta))
 myCommand(
         source=[bifur_adj, nearestnodes, ndownstream, nodepositions],
         target=head_rivpt,
         action=lib.find_head_rivpt)
 
-bifurs = os.path.join(output, '{0}_{1}_{2}_bifurcations.csv'.format(domain, delta, STNres))
-bifurnetwork = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.pkl'.format(domain, delta, STNres))
-bifuroutlets = os.path.join(output, '{0}_{1}_{2}_bifur_outlet_cellids.csv'.format(domain, delta, STNres))
+bifurs = os.path.join(output, '{0}_{1}_bifurcations.csv'.format(delta, STNres))
+bifurnetwork = os.path.join(reswork, '{0}_{1}_network_delta_bifur.nx.pkl'.format(delta, STNres))
+bifuroutlets = os.path.join(output, '{0}_{1}_bifur_outlet_cellids.csv'.format(delta, STNres))
 b = myCommand(
         source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
                 riv_dist_to_coast, river_widths],
@@ -468,7 +466,7 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
     for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
         p = myCommand(
                 source=[networkversion, bifur_grid, bifur_adj],
-                target=os.path.join(domainfigures, '{0}_{1}_{2}_{3}map{4}.png'.format(domain, delta, STNres, network_name, label_name)),
+                target=os.path.join(resfigures, '{0}_{1}_{2}map{3}.png'.format(delta, STNres, network_name, label_name)),
                 action=[lib.plot_network_map,
                         'convert -trim $TARGET $TARGET'],
                 labels=labels,
@@ -476,30 +474,30 @@ for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, ''
         env.Default(p)
 p = myCommand(
         source=[bifur_adj, segments],
-        target=os.path.join(domainfigures, '{0}_{1}_{2}_river_flowdirs.png'.format(domain, delta, STNres)),
+        target=os.path.join(resfigures, '{0}_{1}_river_flowdirs.png'.format(delta, STNres)),
         action=[lib.plot_flowdirs_map,
                 'convert -trim $TARGET $TARGET'],
         inspect=INSPECTfig)
 env.Default(p)
 
-bifurnetworkgraphml = os.path.join(domainwork, '{0}_{1}_{2}_network_delta_bifur.nx.graphml'.format(domain, delta, STNres))
+bifurnetworkgraphml = os.path.join(reswork, '{0}_{1}_network_delta_bifur.nx.graphml'.format(delta, STNres))
 t = myCommand(
         source=bifurnetwork,
         target=bifurnetworkgraphml,
         action=lib.convert_network_to_graphml)
 env.Default(t)
 
-STNcells = os.path.join(domainwork, 'STNnetwork_dbcells.txt')
+STNcells = os.path.join(reswork, 'STNnetwork_dbcells.txt')
 env.Command(
         source=STNnetwork,
         target=STNcells,
         action='rgis2table -a DBCells $SOURCE > $TARGET')
-SSEAcells = os.path.join(domainwork, 'SSEAnetwork_dbcells.txt')
+SSEAcells = os.path.join(reswork, 'SSEAnetwork_dbcells.txt')
 env.Command(
         source=SSEAnetwork,
         target=SSEAcells,
         action='rgis2table -a DBCells $SOURCE > $TARGET')
-SSEA_bifurs = os.path.join(output, '{0}_{1}_{2}_SSEA_bifurcations.csv'.format(domain, delta, STNres))
+SSEA_bifurs = os.path.join(output, '{0}_{1}_SSEA_bifurcations.csv'.format(delta, STNres))
 env.Command(
         source=[STNcells, SSEAcells, bifurs],
         target=SSEA_bifurs,
