@@ -69,12 +69,12 @@ params = {
 
 # merge multiple country-level data if necessary
 if len(OSMshps) > 1:
-    merged_shps = os.path.join(work, 'merged_rivs.shp')
+    merged_shps = os.path.join(work, 'merged_rivs', 'merged_rivs.shp')
     env.Command(
             source=OSMshps,
             target=merged_shps,
             action='ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET $SOURCES')
-    merged_waterways = os.path.join(work, 'merged_waterways.shp')
+    merged_waterways = os.path.join(work, 'merged_rivs', 'merged_waterways.shp')
     env.Command(
             source=OSMwaterways,
             target=merged_waterways,
@@ -95,12 +95,12 @@ myCommand(
         source=[deltashp]+grwl_shps,
         target=grwl_shp_list,
         action=lib.find_grwl_list)
-merged_GRWL_ll = os.path.join(work, '{0}_grwl_ll.shp'.format(delta))
+merged_GRWL_ll = os.path.join(work, '{0}_grwl_ll'.format(delta), '{0}_grwl_ll.shp'.format(delta))
 myCommand(
         source=[grwl_shp_list]+grwl_shps,
         target=merged_GRWL_ll,
         action='cat ${SOURCES[0]} | xargs ogrmerge.py -single -lco ENCODING=UTF-8 -o $TARGET')
-merged_GRWL = os.path.join(work, '{0}_grwl.shp'.format(delta))
+merged_GRWL = os.path.join(work, '{0}_grwl'.format(delta), '{0}_grwl.shp'.format(delta))
 myCommand(
         source=[proj4str, merged_GRWL_ll],
         target=merged_GRWL,
