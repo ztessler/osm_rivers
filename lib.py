@@ -1577,6 +1577,7 @@ def remap_riv_network(source, target, env):
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
         wrote = []
+        fracs = {}
         for oldedge in Gorig.edges:
             # zero out removed links
             if oldedge not in G.edges:
@@ -1639,6 +1640,25 @@ def remap_riv_network(source, target, env):
                     if (from_cell, neighbor_cell, 1) not in wrote: # use 1 as sentinel to avoid round-off errors. will revisit some edges if both bifur branches are new. neighbor_cell will be computed twice, but dont want to write twice
                         csvwriter.writerow([from_cell, neighbor_cell, dis_frac])
                         wrote.append((from_cell, neighbor_cell, 1))
+                        fracs[(from_cell, neighbor_cell)] = dis_frac
+
+    # starting at head_rivpt (which cooresponds to upstream discharge source), walk down and
+    # track fraction of original flow at each node. for estimating outlet fraction
+    tovisit = [(nearestnode[head_rivpt], 1)]
+    while tovisit:
+        node, flow = tovisit.pop(0)
+        if 'flow' in G.node[node]:
+            G.node[node]['flow'] += flow
+        else:
+            G.node[node]['flow'] = flow
+        for to_node in G.succ[node]:
+            from_cell = cellid[nodes.index(node)]
+            to_cell = cellid[nodes.index(to_node)]
+            if (from_cell, to_cell) in fracs:
+                flow_frac = flow * fracs[(from_cell, to_cell)]
+            else:
+                flow_frac = flow
+            tovisit.append((to_node, flow_frac))
 
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
@@ -1647,7 +1667,8 @@ def remap_riv_network(source, target, env):
 
     with open(str(target[2]), 'w') as fout:
         for outlet in sorted(outlets):
-            fout.write(str(outlet)+'\n')
+            node = nodes[cellid.index(outlet)]
+            fout.write('{0},{1:0.3f}\n'.format(outlet, G.node[node]['flow']))
 
     return 0
 
