@@ -629,7 +629,23 @@ def plot_network_map(source, target, env):
         affine = rast.transform
     with rasterio.open(str(source[2]), 'r') as rast:
         bifurs = (rast.read(1) > 0).astype(np.int)
+    with open(str(source[3]), 'r') as fin:
+        proj4_init = fin.read()
     labeltype = env['labels']
+
+    proj4_params = {}
+    for kv in proj4_init.split():
+        if '=' in kv:
+            k,v = kv.split('=')
+            k = k.replace('+','')
+            try:
+                proj4_params[k] = float(v)
+            except ValueError:
+                proj4_params[k] = v
+
+    assert proj4_params['proj'] == 'laea'
+    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = proj4_params['lon_0'],
+                                          central_latitude = proj4_params['lat_0'])
 
     # reset upstream counts
     for node in G.nodes():
@@ -637,7 +653,8 @@ def plot_network_map(source, target, env):
         G.node[node]['downstream'] = len(nx.descendants(G, node))
 
     mpl.style.use('ggplot')
-    fig, ax = plt.subplots(1,1, figsize=(8, 12))#, dpi=300)
+    fig, ax = plt.subplots(1,1, figsize=(8, 12), subplot_kw={'projection':laea})#, dpi=300)
+    ax.coastlines('10m')
 
     pos = {node: G.node[node]['xy'] for node in G.node}
     basin = np.array([G.node[node]['basin'] for node in G.node])
