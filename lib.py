@@ -656,6 +656,8 @@ def convert_network_to_graphml(source, target, env):
         del G.nodes[node]['xy']
         if 'branches' in G.nodes[node]:
             G.nodes[node]['branches'] = ' '.join([str(b) for b in G.nodes[node]['branches']])
+        if 'flow' in G.nodes[node]:
+            G.nodes[node]['flow'] = float(G.nodes[node]['flow'])
 
     edges = list(G.edges)
     for edge in edges:
@@ -672,7 +674,6 @@ def convert_network_to_graphml(source, target, env):
 
     nx.write_graphml(G, str(target[0]))
     return 0
-
 
 
 def find_bifurs(source, target, env):
