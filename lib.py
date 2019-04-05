@@ -967,7 +967,7 @@ def find_river_segments(source, target, env):
     # just start at the first one. all rivers are connected, so will get everywhere
 
     branchpoints = set()
-    for j,i in zip(*np.where(rivers==3)):
+    for j,i in zip(*np.where(rivers>=3)):
         for dj in [-1,0,1]:
             for di in [-1,0,1]:
                 if dj == di == 0:
@@ -986,7 +986,7 @@ def find_river_segments(source, target, env):
     while tovisit:
         j, i, cursegi = tovisit.pop(0)
         segments[cursegi].append((j,i))
-        if (rivers[j,i] == 3) or ((rivers[j,i] == 1) and (len(segments[cursegi])>1)):
+        if (rivers[j,i] >= 3) or ((rivers[j,i] == 1) and (len(segments[cursegi])>1)):
             # found segment end
             # mark points on this segment as complete
             for (_j, _i) in segments[cursegi]:
@@ -1013,7 +1013,7 @@ def find_river_segments(source, target, env):
                         continue
 
                     # found next river point
-                    if rivers[j,i] == 3: # currently on bifur point
+                    if rivers[j,i] >= 3: # currently on bifur point
                         maxsegi += 1 # each branch gets new cursegi
                         nextsegi = maxsegi
                         segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
