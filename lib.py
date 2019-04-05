@@ -915,6 +915,41 @@ def calc_dist_to_coast(source, target, env):
     riv_dist_to_coast.to_pickle(str(target[1]))
     return 0
 
+def calc_riv_flowdist_to_coast(source, target, env):
+    with rasterio.open(str(source[0]), 'r') as rast:
+        rivers = rast.read(1)
+        affine = rast.transform
+        meta = rast.meta.copy()
+    with open(str(source[1]), 'rb') as fin:
+        riv_dist_to_coast = pickle.load(fin)
+
+    endpoints = np.where(rivers==1)
+    outlets = [endpt for endpt in zip(*endpoints) if riv_dist_to_coast[endpt]<10000]
+
+    mindist = np.zeros_like(rivers) * np.nan
+    for outlet in outlets:
+        tovisit = [(outlet, 0)]
+        visited = set(outlet)
+        while tovisit:
+            rivpt, dist = tovisit.pop()
+            mindist[rivpt] = np.nanmin([mindist[rivpt], dist])
+            for dj in [-1,0,1]:
+                for di in [-1,0,1]:
+                    if dj==di==0:
+                        continue
+                    nextpt = (rivpt[0]+dj, rivpt[1]+di)
+                    if (nextpt[0]<0 or nextpt[0]==rivers.shape[0] or
+                            nextpt[1]<0 or nextpt[1]==rivers.shape[1]):
+                        continue
+                    if rivers[nextpt]>0 and nextpt not in visited:
+                        tovisit.append((nextpt, dist+1))
+            visited.add(rivpt)
+
+    meta['dtype'] = mindist.dtype
+    with rasterio.open(str(target[0]), 'w', **meta) as rast:
+        rast.write(mindist, 1)
+    return 0
+
 
 def find_river_segments(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:

@@ -391,6 +391,12 @@ for delta in deltas:
             target=[node_dist_to_coast, riv_dist_to_coast],
             action=lib.calc_dist_to_coast)
 
+    riv_flowdist_to_coast = os.path.join(reswork, 'riv_flowdist_to_coast.tif')
+    myCommand(
+            source=[bifur_grid, riv_dist_to_coast],
+            target=riv_flowdist_to_coast,
+            action=lib.calc_riv_flowdist_to_coast)
+
     head_rivpt = os.path.join(reswork, 'head_rivpt.1.pkl')
     myCommand(
             source=[bifur_grid, nearestnodes1, ndownstream, nodepositions],
