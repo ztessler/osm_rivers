@@ -1761,6 +1761,7 @@ def remap_riv_network(source, target, env):
                 to_visit.append(((rivj2, rivi2), next_node_i, newbranch)) # first branch stays the same
         if ((len(next_rivpt[rivj,rivi]) == 0) and
             (riv_dist_to_coast[rivj,rivi] <= 10000) and # meters
+            (next_cell not in edits) and # another branch has already routed flow from this node, dont remove
             (next_node is not None)):
             # no downstream points, AND CLOSE TO COAST, remove downstream flow from node
             # dont do this for likely upstream points, just leave existing connections
