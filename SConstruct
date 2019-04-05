@@ -369,7 +369,7 @@ for delta in deltas:
 
     segments2 = os.path.join(work, 'river_segments.2.pkl')
     myCommand(
-            source=[segments1, bifur_grid, clipped_ww_vec, riv_dist_to_coast],
+            source=[segments1, bifur_grid, clipped_ww_vec, riv_flowdist_to_coast],
             target=segments2,
             action=lib.set_segment_flowdir)
 
@@ -416,7 +416,7 @@ for delta in deltas:
 
     segments = os.path.join(reswork, '{0}_river_segments.pkl'.format(delta))
     myCommand(
-            source=[segments3, bifur_adj, clipped_ww_vec, riv_dist_to_coast],
+            source=[segments3, bifur_adj, clipped_ww_vec, riv_flowdist_to_coast],
             target=segments,
             action=lib.set_segment_flowdir)
 

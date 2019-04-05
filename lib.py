@@ -1036,8 +1036,11 @@ def set_segment_flowdir(source, target, env):
         rivers = rast.read(1)
         affine = rast.transform
     waterways = geopandas.read_file(str(source[2]))
-    with open(str(source[3]), 'rb') as fin:
-        riv_dist_to_coast = pickle.load(fin)
+    #with open(str(source[3]), 'rb') as fin:
+        #riv_dist_to_coast = pickle.load(fin)
+    with rasterio.open(str(source[3])) as rast:
+        flowdist = rast.read(1)
+
     lines = waterways['geometry']
     sindex = lines.sindex
 
@@ -1108,7 +1111,8 @@ def set_segment_flowdir(source, target, env):
                 use_dist_to_coast = True
         if (count < min(7, len(segment))) or use_dist_to_coast:
             # use dist_to_coast since not enough segment pixels align with an osm waterway
-            if ((riv_dist_to_coast[segment[0]] < riv_dist_to_coast[segment[-1]])): # and
+            #if ((riv_dist_to_coast[segment[0]] < riv_dist_to_coast[segment[-1]])): # and
+            if ((flowdist[segment[0]] < flowdist[segment[-1]])): # and
                     #(riv_dist_to_coast[segment[0]] < 10000) and
                     #(riv_dist_to_coast[segment[-1]] > 10000)): # replace with node resolution?
                 directed_segments[segi] = segment[::-1]
@@ -1145,6 +1149,33 @@ def set_segment_flowdir(source, target, env):
                     print('Found source-only or sink-only bifur - reversing shortest segment {}'.format(candidates))
                     directed_segments[segi] = directed_segments[segi][::-1]
                 reversed_segment = True
+        if not reversed_segment:
+            break
+
+    # check for pairs of segments with same start/end points, but flowing in different
+    # directions. should be in same direction. change to ensure no source-only or sink-only
+    # endpoints
+    while True:
+        reversed_segment = False
+        for segi, segj in itertools.combinations(directed_segments.keys(), 2):
+            seg1 = directed_segments[segi]
+            seg2 = directed_segments[segj]
+            if (seg1[0] == seg2[-1] and seg1[-1] == seg2[0]):
+                for segk, segl in itertools.combinations(directed_segments.keys(), 2):
+                    if (segk in [segi, segj]) or (segl in [segi, segj]):
+                        continue
+                    seg3 = directed_segments[segk]
+                    seg4 = directed_segments[segl]
+                    if seg3[-1] == seg1[0] and seg4[0] == seg1[-1]: #seg3 upstream, seg4 down
+                        # change seg2
+                        directed_segments[segj] = directed_segments[segj][::-1]
+                        print('Mismatched loop, reversing segment {}'.format(segi))
+                        reversed_segment = True
+                    elif seg3[-1] == seg2[0] and seg4[0] == seg2[-1]: #seg3 upstream, seg4 down
+                        # change seg1
+                        directed_segments[segi] = directed_segments[segi][::-1]
+                        print('Mismatched loop, reversing segment {}'.format(segi))
+                        reversed_segment = True
         if not reversed_segment:
             break
 
