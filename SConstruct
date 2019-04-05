@@ -274,12 +274,12 @@ for delta in deltas:
     riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
     myCommand(
             source=riv_skel,
-            target=riv_dropped_small,
+            target=riv_clean,
             action=lib.keep_n_rivers,
             n=1)
     p = env.Command(
             source=riv_clean,
-            target=os.path.join(figures, '{}_riv_dropped_small.2.png').format(delta),
+            target=os.path.join(figures, '{}_riv_clean.png').format(delta),
             action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
     env.Default(p)
 
@@ -294,12 +294,6 @@ for delta in deltas:
             source=bifur_grid,
             target=segments1,
             action=lib.find_river_segments)
-
-    p = env.Command(
-            source=riv_clean,
-            target=os.path.join(figures, '{}_riv_clean.3.png').format(delta),
-            action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
-    env.Default(p)
 
     # add record id column to network cell table
     network = os.path.join(reswork, '{0}_network.gdbn'.format(STNres))
