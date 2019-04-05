@@ -421,9 +421,10 @@ for delta in deltas:
             action=lib.set_segment_flowdir)
 
     river_widths = os.path.join(reswork, '{0}_river_widths.pkl'.format(delta))
+    river_widths_rast = os.path.join(reswork, '{0}_river_widths.tif'.format(delta))
     myCommand(
             source=[segments, bifur_adj, merged_GRWL],
-            target=river_widths,
+            target=[river_widths, river_widths_rast],
             action=lib.set_segment_widths)
 
     next_rivpts = os.path.join(reswork, '{0}_next_rivpts.pkl'.format(delta))

@@ -1159,7 +1159,9 @@ def set_segment_widths(source, target, env):
     with rasterio.open(str(source[1])) as rast:
         rivers = rast.read(1)
         affine = rast.transform
+        meta = rast.meta.copy()
     widths = geopandas.read_file(str(source[2]))
+    widths_rast = np.zeros_like(rivers) * np.nan
     lines = widths['geometry']
     sindex = lines.sindex
 
@@ -1227,11 +1229,15 @@ def set_segment_widths(source, target, env):
         widths = [w for w in widths if w is not None]
         if widths:
             river_widths[rivj,rivi] = np.mean(widths)
+            widths_rast[rivj,rivi] = np.mean(widths)
         else:
             river_widths[rivj,rivi] = None
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(river_widths, fout)
+    meta['dtype'] = widths_rast.dtype
+    with rasterio.open(str(target[1]), 'w', **meta) as rast:
+        rast.write(widths_rast, 1)
     return 0
 
 
