@@ -445,7 +445,7 @@ for delta in deltas:
     bifurnetwork = os.path.join(reswork, '{0}_{1}_network_delta_bifur.nx.pkl'.format(delta, STNres))
     bifuroutlets = os.path.join(output, '{0}_{1}_bifur_outlet_cellids.csv'.format(delta, STNres))
     b = myCommand(
-            source=[networkdelta, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
+            source=[networkdelta, network, bifur_adj, head_rivpt, next_rivpts, prev_rivpts, nearestnodes,
                     riv_dist_to_coast, river_widths],
             target=[bifurs, bifurnetwork, bifuroutlets],
             action=lib.remap_riv_network)

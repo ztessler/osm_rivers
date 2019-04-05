@@ -1531,21 +1531,22 @@ def extend_rivers_to_coast(source, target, env):
 def remap_riv_network(source, target, env):
     G = nx.read_gpickle(str(source[0]))
     Gorig = G.copy()
-    with rasterio.open(str(source[1]), 'r') as rast:
+    Gbasin = nx.read_gpickle(str(source[1]))
+    with rasterio.open(str(source[2]), 'r') as rast:
         rivers = rast.read(1)
         affine = rast.transform
         meta = rast.meta.copy()
-    with open(str(source[2]), 'rb') as fin:
-        head_rivpt = pickle.load(fin)
     with open(str(source[3]), 'rb') as fin:
-        next_rivpt = pickle.load(fin)
+        head_rivpt = pickle.load(fin)
     with open(str(source[4]), 'rb') as fin:
-        prev_rivpt = pickle.load(fin)
+        next_rivpt = pickle.load(fin)
     with open(str(source[5]), 'rb') as fin:
-        nearestnode = pickle.load(fin)
+        prev_rivpt = pickle.load(fin)
     with open(str(source[6]), 'rb') as fin:
-        riv_dist_to_coast = pickle.load(fin)
+        nearestnode = pickle.load(fin)
     with open(str(source[7]), 'rb') as fin:
+        riv_dist_to_coast = pickle.load(fin)
+    with open(str(source[8]), 'rb') as fin:
         river_widths = pickle.load(fin)
 
     nodes = [node for node in G.nodes()]
@@ -1843,30 +1844,29 @@ def remap_riv_network(source, target, env):
                         wrote.append((from_cell, neighbor_cell, 1))
                         fracs[(from_cell, neighbor_cell)] = dis_frac
 
-    # starting at head_rivpt (which cooresponds to upstream discharge source), walk down and
-    # track fraction of original flow at each node. for estimating outlet fraction
-    #tovisit = [(nearestnode[head_rivpt], 1)]
-    #while tovisit:
-        #node, flow = tovisit.pop(0)
-        #if 'flow' in G.node[node]:
-            #G.node[node]['flow'] += flow
-        #else:
-            #G.node[node]['flow'] = flow
-        #for to_node in G.succ[node]:
-            #from_cell = cellid[nodes.index(node)]
-            #to_cell = cellid[nodes.index(to_node)]
-            #if (from_cell, to_cell) in fracs:
-                #flow_frac = flow * fracs[(from_cell, to_cell)]
-            #else:
-                #flow_frac = flow
-            #tovisit.append((to_node, flow_frac))
-    # rather, start from each outlet and work way upstream. captures flow from outside main stem
+    # copy edits over to full basin network, so full network can be used to compute flow fractions
+    for oldedge in Gorig.edges:
+        if oldedge not in G.edges:
+            # zero out removed links
+            Gbasin.remove_edge(*oldedge)
+    for newedge in G.edges:
+        if newedge not in Gorig.edges:
+            # make new link
+            Gbasin.add_edge(*newedge)
+    basinnodes = [node for node in Gbasin.nodes()]
+    basincellids = [Gbasin.node[node]['cellid'] for node in basinnodes]
+
+    # start from each outlet and work way upstream. captures flow from outside main stem
+    # remember values for each cell to avoid lots of recomputing
+    upstream_fluxes = {}
     def _upstream_flux(cell):
-        node = nodes[cellid.index(cell)]
+        node = basinnodes[basincellids.index(cell)]
         flux = 1
-        for pred in G.pred[node]:
-            pred_cell = cellid[nodes.index(pred)]
-            flux += _upstream_flux(pred_cell) * fracs.get((pred_cell, cell), 1.0)
+        for pred in Gbasin.pred[node]:
+            pred_cell = basincellids[basinnodes.index(pred)]
+            if pred_cell not in upstream_fluxes:
+                upstream_fluxes[pred_cell] = _upstream_flux(pred_cell)
+            flux += upstream_fluxes[pred_cell] * fracs.get((pred_cell, cell), 1.0)
         return flux
     fluxes = {outlet: _upstream_flux(outlet) for outlet in outlets}
     total_flux = sum(list(fluxes.values()))
