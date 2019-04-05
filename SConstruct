@@ -44,8 +44,9 @@ allOSMrivers = {'Mekong': 'vietnam:cambodia',
                 'Chao_Phraya': 'thailand',
                 'Godavari': 'india',
                 }
-params = defaultdict(lambda:{'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40})
-params['Mekong'] = {'wetlands': False, 'thinning': 100, 'minwaterway': 30000, 'minarea': 0, 'minlen': 40}
+params = defaultdict(lambda:{'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minwidth': 100, 'minarea': 0, 'minlen': 40})
+params['Mekong'] = {'wetlands': False, 'thinning': 300, 'minwaterway': 30000, 'minwidth': 300,
+        'minarea': 50000, 'minlen': 40}
         #'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40},
         #'Godavari': {'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40},
         #}
@@ -185,13 +186,27 @@ for delta in deltas:
             action=lib.filter_waterway_rivers,
             minwaterway=params[delta]['minwaterway'])
 
+    filtered_vec = os.path.join(work, '{0}_filtered_vec/{0}_filtered_vec.shp'.format(delta))
+    p = myCommand(
+            source=clipped_vec,
+            target=filtered_vec,
+            action=lib.filter_river_types,
+            wetlands=params[delta]['wetlands'])
+
+    width_est_vec = os.path.join(work, '{0}_riv_width_est/{0}_riv_width_est.shp'.format(delta))
+    myCommand(
+            source=filtered_vec,
+            target=width_est_vec,
+            action=lib.get_river_widths)
+
     thinned_vec = os.path.join(work, '{0}_riv_thinned/{0}_riv_thinned.shp'.format(delta))
     myCommand(
-            source=clipped_vec,
+            #source=filtered_vec,
+            source=width_est_vec,
             target=thinned_vec,
             action=lib.thin_vec,
-            wetlands=params[delta]['wetlands'],
             thinning=params[delta]['thinning'],
+            minwidth=params[delta]['minwidth'],
             minarea=params[delta]['minarea'])
             #minhole=params[delta]['minhole'])
     p = myCommand(

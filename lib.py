@@ -150,51 +150,75 @@ def filter_waterway_rivers(source, target, env):
     return 0
 
 
+def filter_river_types(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+    if not env.get('wetlands', True):
+        # keep unspecified, reservoirs, and rivers and river classes. lakes are often unspec.
+        rivers = rivers[(rivers['code']==8200) | (rivers['code']==8201) | (rivers['code']==8202)]
+    rivers.to_file(str(target[0]))
+    return 0
+
+
 def get_river_widths(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
-    rivers = rivers[rivers['fclass'] == 'river']
+
+    def est_width(s):
+        shps = s['geometry']
+        if not isinstance(shps, sgeom.MultiPolygon):
+            shps = [shps]
+        widths = []
+        for shp in shps:
+            a = shp.area
+            p = shp.length
+            for interior in shp.interiors:
+                hole = sgeom.Polygon(interior)
+                p -= hole.length
+            widths.append((p - np.sqrt(p**2 - 16*a)) / 4) # - term is smaller, is width
+        return np.mean(widths)
 
     # estimate width of each segment using area=w*l, perimeter=2w+2l, solve with quadratic formula
-    simplified = rivers['geometry'].simplify(0.001)
-    a = simplified.area
-    p = simplified.boundary.length
-    #x1 = (a + np.sqrt(p**2 - 16*a)) / 4 # larger, will be length
-    width = (a - np.sqrt(p**2 - 16*a)) / 4 # smaller, will be width
+    #simplified = rivers['geometry'].simplify(0.001)
+    #a = simplified.area
+    #p = simplified.boundary.length
+    #x1 = (p + np.sqrt(p**2 - 16*a)) / 4 # larger, will be length
+    #width = (p - np.sqrt(p**2 - 16*a)) / 4 # smaller, will be width
     #= rivers[rivers['width'] > 0]
-    rivers['width_est'] = width
+    #rivers['width_est'] = width
     #rivers = rivers[width > 100]
+
+    rivers['width_est'] = rivers.apply(est_width, axis=1)
 
     rivers.to_file(str(target[0]))
     return 0
 
+
 def thin_vec(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
 
-    if not env.get('wetlands', True):
-        # keep unspecified, reservoirs, and rivers and river classes. lakes are often unspec.
-        rivers = rivers[(rivers['code']==8200) | (rivers['code']==8201) | (rivers['code']==8202)]
-    # drop small area stuff
-    minarea = env.get('minarea', 0)
-    rivers = rivers[rivers.area > minarea]
 
     # drop thin stuff
-    thinning = env.get('thinning', 100)
-    rivers['geometry'] = rivers.buffer(-thinning).buffer(thinning)
-    rivers = rivers[rivers.area>0]
+    thinning = env.get('thinning', 100) # removes thin portions of geoms
+    minwidth = env.get('minwidth', 0)   # removes whole rivers geoms
+    #rivers = rivers[rivers.width_est > minwidth]
+    rivers['geometry'] = rivers.buffer(-thinning/2).buffer(thinning/2)
+    rivers = rivers[(rivers.area>0) & (rivers.width_est > minwidth)]
 
+    # drop remaining small area stuff
+    minarea = env.get('minarea', 0)
+    rivers = rivers[rivers.area > minarea]
 
     # fill holes, braided rivers
     #minhole = env.get('minhole', 0)
     # just fill all holes. might need to leave large ones...
-    newgeoms = []
-    for i, poly in rivers['geometry'].items():
-        if isinstance(poly, sgeom.MultiPolygon):
-            poly2 = sgeom.MultiPolygon([sgeom.Polygon(p.exterior) for p in poly])
-        else:
-            poly2 = sgeom.Polygon(poly.exterior)
-        newgeoms.append(poly2)
-    #rivers.loc[i, 'geometry'] = poly2
-    rivers['geometry'] = geopandas.GeoSeries(newgeoms, index=rivers.index)
+    #newgeoms = []
+    #for i, poly in rivers['geometry'].items():
+        #if isinstance(poly, sgeom.MultiPolygon):
+            #poly2 = sgeom.MultiPolygon([sgeom.Polygon(p.exterior) for p in poly])
+        #else:
+            #poly2 = sgeom.Polygon(poly.exterior)
+        #newgeoms.append(poly2)
+    ##rivers.loc[i, 'geometry'] = poly2
+    #rivers['geometry'] = geopandas.GeoSeries(newgeoms, index=rivers.index)
 
     #rivers_merge = geopandas.overlay(geopandas.GeoDataFrame(rivers, columns=['geometry']), geopandas.GeoDataFrame(rivers, columns=['geometry']), how='union')
     #rivers_merge.crs = rivers.crs
