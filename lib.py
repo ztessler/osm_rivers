@@ -7,6 +7,7 @@ import palettable
 import pandas
 import geopandas
 import shapely.geometry as sgeom
+import shapely.ops as sops
 import rasterio
 import rasterio.features as rfeatures
 import fiona
@@ -229,9 +230,83 @@ def thin_vec(source, target, env):
 
 def merge_water_waterway_vecs(source, target, env):
     water = geopandas.read_file(str(source[0]))
-    waterways = geopandas.read_file(str(source[1]))
+    unthinned_water = geopandas.read_file(str(source[1]))
+    waterways = geopandas.read_file(str(source[2]))
 
-    buff = env.get('buff', 100)
+    # remove any waterways that mostly overlap a polygon that is in unthinned_water but not water
+    # these waterways have already been removed in the polygon layer (due to width), so don't add them back
+    #import ipdb;ipdb.set_trace()
+    # probably very slow. think about how to speed up
+    #import time
+    #t = time.time()
+    #print('Running...')
+    #removed_polys = geopandas.overlay(unthinned_water, water, how='difference').unary_union()
+    #waterways = waterways.difference(removed_polys)
+    #print('Took {} seconds'.format(t-time.time()))
+    unthinned_index = unthinned_water.sindex
+    thinned_index = water.sindex
+    goodlines = []
+    filtered_waterways = waterways.copy()
+    for i, line in waterways.iterrows():
+        unthinned_maybe_ind = list(unthinned_index.intersection(line['geometry'].bounds))
+        if not unthinned_maybe_ind:
+            # line is not in original water bodies layer, so keep
+            continue
+        unthinned_maybe = unthinned_water.iloc[unthinned_maybe_ind]
+        unthinned_matches = unthinned_maybe[unthinned_maybe['geometry'].intersects(line['geometry'])]
+
+        thinned_maybe_ind = list(thinned_index.intersection(line['geometry'].bounds))
+        if not thinned_maybe_ind:
+            # line was in original, but none left in thinned. remove from waterways too
+            filtered_waterways.drop(i, inplace=True)
+            continue
+        thinned_maybe = water.iloc[thinned_maybe_ind]
+        thinned_matches = thinned_maybe[thinned_maybe['geometry'].intersects(line['geometry'])]
+        if thinned_matches.empty:
+            # line was in original, but none left in thinned. remove from waterways too
+            filtered_waterways.drop(i, inplace=True)
+            continue
+
+        # remove segments that are inside original water polygons. either they were removed during
+        # thinning, in which we remove them here too, or they were kept, in which case we already
+        # either way, we dont need the overlap
+        # but we DO need to keep segments that are outside of unthinned water bodies, since those
+        # are new river segs
+        segments_to_remove = []
+        for j, unthinned_match in unthinned_matches.iterrows():
+            overlap = line['geometry'].intersection(unthinned_match['geometry'])
+            if isinstance(overlap, sgeom.Point):
+                overlap = sgeom.LineString([overlap, overlap])
+            if isinstance(overlap, sgeom.MultiLineString):
+                for linestring in overlap:
+                    segments_to_remove.append(linestring)
+            else:
+                segments_to_remove.append(overlap)
+
+            #keep = True
+            #for k, thinned_match in thinned_matches.iterrows():
+                #if not overlap.intersection(thinned_match['geometry']).almost_equals(overlap):
+                    #keep = False
+            #if keep:
+                #newlines.append(overlap)
+        if segments_to_remove:
+            if len(segments_to_remove)>1:
+                toremove = sgeom.MultiLineString(segments_to_remove)
+                # clean it up, segments might be out of order. line could double back.
+                toremove = sops.linemerge(toremove.intersection(toremove))
+            else:
+                toremove = segments_to_remove[0]
+            newlines = line['geometry'].difference(toremove)
+            filtered_waterways.drop(i, inplace=True)
+            if newlines.length > 0:
+                if not isinstance(newlines, sgeom.MultiLineString):
+                    newlines = [newlines]
+                for newline in newlines:
+                    line['geometry'] = sgeom.LineString(newline)
+                    filtered_waterways = filtered_waterways.append(line)
+    waterways = filtered_waterways[filtered_waterways.length > 0].reset_index()
+
+    buff = env.get('buff', 100)*2
     waterway_polys = geopandas.GeoDataFrame(waterways.buffer(buff), columns=['geometry'], crs=waterways.crs)
 
     merged = geopandas.overlay(water, waterway_polys, how='union')

@@ -223,7 +223,7 @@ for delta in deltas:
 
     merged_vec = os.path.join(work, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
     myCommand(
-            source=[thinned_vec, filtered_rivers_ww_vec],
+            source=[thinned_vec, filtered_vec, filtered_rivers_ww_vec],
             target=merged_vec,
             action=lib.merge_water_waterway_vecs,
             buff=params[delta]['thinning'])
