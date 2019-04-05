@@ -596,14 +596,15 @@ def import_rgis_network(source, target, env):
     G = nx.DiGraph()
     Gclip = nx.DiGraph()
     nj, ni = cellids.shape
+    def adjj(j): return nj-j-1 # shift j node number to match netcdf file convention. zero at bottom
     for j in range(nj):
         for i in range(ni):
             if cellids[j,i] != nodata:
                 ll = affine * (i+.5, j+.5)
                 xy = proj(*ll)
-                G.add_node((i,j), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
+                G.add_node((adjj(j),i), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
                 if (minx < xy[0] < maxx) and (miny < xy[1] < maxy):
-                    Gclip.add_node((i,j), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
+                    Gclip.add_node((adjj(j),i), **dict(ll=ll, xy=xy, basin=basins[j,i], cellid=cellids[j,i]))
                 tocell = flowdir[j,i]
                 if tocell != 0:
                     di, dj = neighbors[tocell]
@@ -612,12 +613,12 @@ def import_rgis_network(source, target, env):
                     if (0<=i2<ni and 0<=j2<nj) and cellids[j2, i2] != nodata:
                         ll2 = affine * (i2+.5, j2+.5)
                         xy2 = proj(*ll2)
-                        G.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
-                        G.add_edge((i, j), (i2, j2))
+                        G.add_node((adjj(j2),i2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
+                        G.add_edge((adjj(j),i), (adjj(j2),i2))
                         if (minx < xy2[0] < maxx) and (miny < xy2[1] < maxy):
-                            Gclip.add_node((i2,j2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
-                            if (i,j) in Gclip:
-                                Gclip.add_edge((i, j), (i2, j2))
+                            Gclip.add_node((adjj(j2),i2), **dict(ll=ll2, xy=xy2, basin=basins[j2,i2], cellid=cellids[j2,i2]))
+                            if (adjj(j),i) in Gclip:
+                                Gclip.add_edge((adjj(j),i), (adjj(j2),i2))
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
         G.node[node]['downstream'] = len(nx.descendants(G, node))
@@ -1878,9 +1879,10 @@ def remap_riv_network(source, target, env):
     nx.write_gpickle(G, str(target[1]))
 
     with open(str(target[2]), 'w') as fout:
+        fout.write('Outlet,NodeI,NodeJ(netcdf convention),Discharge Fraction\n')
         for outlet in sorted(outlets):
             node = nodes[cellid.index(outlet)]
-            fout.write('{0},{1:0.3f}\n'.format(outlet, frac_flux[outlet]))
+            fout.write('{0},{1},{2},{3:0.3f}\n'.format(outlet, node[1], node[0], frac_flux[outlet]))
 
     return 0
 
