@@ -406,15 +406,16 @@ def skeleton_riv(source, target, env):
     closing = env.get('closing', 5)
     rivers = morph.binary_closing(rivers, morph.square(closing))
 
-    holethresh = env.get('holethresh', 1000)
-    rivers = morph.remove_small_holes(rivers, min_size=holethresh, connectivity=2)
+    #holethresh = env.get('holethresh', 1000)
+    #rivers = morph.remove_small_holes(rivers, min_size=holethresh, connectivity=2)
 
     rivers = morph.skeletonize(rivers)
     rivers = rivers.astype(np.uint8)
 
     # another closing to fix weird checkerboards and stuff
     rivers = morph.binary_closing(rivers, morph.square(3))
-    skeleton = morph.skeletonize(rivers)
+    #skeleton = morph.skeletonize(rivers)
+    skeleton = morph.thin(rivers)
     skeleton = skeleton.astype(np.uint8)
     skeleton[skeleton>0] = 1
 
