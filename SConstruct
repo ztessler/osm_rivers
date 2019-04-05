@@ -289,44 +289,50 @@ for delta in deltas:
             target=bifur_grid1,
             action=lib.find_bifurs)
 
-    riv_clean1 = os.path.join(work, '{0}_riv_cleaned.1.tif'.format(delta))
-    myCommand(
-            source=bifur_grid1,
-            target=riv_clean1,
-            action=lib.trim_short_rivs,
-            minlen=params[delta]['minlen'])
+    # leave small segments. use flowdir dist to direct them easily
+    #riv_clean1 = os.path.join(work, '{0}_riv_cleaned.1.tif'.format(delta))
+    #myCommand(
+            #source=bifur_grid1,
+            #target=riv_clean1,
+            #action=lib.trim_short_rivs,
+            #minlen=params[delta]['minlen'])
 
-    bifur_grid2 = os.path.join(work,'{0}_bifurs.2.tif'.format(delta))
-    env.Command(
-            source=riv_clean1,
-            target=bifur_grid2,
-            action=lib.find_bifurs)
+    #bifur_grid2 = os.path.join(work,'{0}_bifurs.2.tif'.format(delta))
+    #env.Command(
+            #source=riv_clean1,
+            #target=bifur_grid2,
+            #action=lib.find_bifurs)
 
     segments1 = os.path.join(work, 'river_segments.1.pkl')
     myCommand(
-            source=bifur_grid2,
+            #source=bifur_grid2,
+            source=bifur_grid1,
             target=segments1,
             action=lib.find_river_segments)
 
-    riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
-    myCommand(
-            source=[riv_clean1, segments1],
-            target=riv_clean,
-            action=lib.remove_small_loops,
-            minlen=params[delta]['minlen'])
-    #bifur_grid = os.path.join(work, '{0}_bifurs.tif'
+    # leave these in, flowdir will directed them ok
+    #riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
+    #myCommand(
+            #source=[riv_clean1, segments1],
+            #target=riv_clean,
+            #action=lib.remove_small_loops,
+            #minlen=params[delta]['minlen'])
+    riv_clean = riv_dropped_small
 
-    bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
-    env.Command(
-            source=riv_clean,
-            target=bifur_grid,
-            action=lib.find_bifurs)
+    #bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
+    #env.Command(
+            ##source=riv_clean,
+            #source=riv_clean1,
+            #target=bifur_grid,
+            #action=lib.find_bifurs)
 
-    segments2 = os.path.join(work, 'river_segments.2.pkl')
-    myCommand(
-            source=bifur_grid,
-            target=segments2,
-            action=lib.find_river_segments)
+    #segments2 = os.path.join(work, 'river_segments.2.pkl')
+    #myCommand(
+            #source=bifur_grid,
+            #target=segments2,
+            #action=lib.find_river_segments)
+    bifur_grid = bifur_grid1
+    segments2 = segments1
 
 
 
