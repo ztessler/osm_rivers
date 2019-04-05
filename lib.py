@@ -1844,21 +1844,32 @@ def remap_riv_network(source, target, env):
 
     # starting at head_rivpt (which cooresponds to upstream discharge source), walk down and
     # track fraction of original flow at each node. for estimating outlet fraction
-    tovisit = [(nearestnode[head_rivpt], 1)]
-    while tovisit:
-        node, flow = tovisit.pop(0)
-        if 'flow' in G.node[node]:
-            G.node[node]['flow'] += flow
-        else:
-            G.node[node]['flow'] = flow
-        for to_node in G.succ[node]:
-            from_cell = cellid[nodes.index(node)]
-            to_cell = cellid[nodes.index(to_node)]
-            if (from_cell, to_cell) in fracs:
-                flow_frac = flow * fracs[(from_cell, to_cell)]
-            else:
-                flow_frac = flow
-            tovisit.append((to_node, flow_frac))
+    #tovisit = [(nearestnode[head_rivpt], 1)]
+    #while tovisit:
+        #node, flow = tovisit.pop(0)
+        #if 'flow' in G.node[node]:
+            #G.node[node]['flow'] += flow
+        #else:
+            #G.node[node]['flow'] = flow
+        #for to_node in G.succ[node]:
+            #from_cell = cellid[nodes.index(node)]
+            #to_cell = cellid[nodes.index(to_node)]
+            #if (from_cell, to_cell) in fracs:
+                #flow_frac = flow * fracs[(from_cell, to_cell)]
+            #else:
+                #flow_frac = flow
+            #tovisit.append((to_node, flow_frac))
+    # rather, start from each outlet and work way upstream. captures flow from outside main stem
+    def _upstream_flux(cell):
+        node = nodes[cellid.index(cell)]
+        flux = 1
+        for pred in G.pred[node]:
+            pred_cell = cellid[nodes.index(pred)]
+            flux += _upstream_flux(pred_cell) * fracs.get((pred_cell, cell), 1.0)
+        return flux
+    fluxes = {outlet: _upstream_flux(outlet) for outlet in outlets}
+    total_flux = sum(list(fluxes.values()))
+    frac_flux = {outlet: f/total_flux for outlet, f in fluxes.items()}
 
     for node in G.nodes():
         G.node[node]['upstream'] = len(nx.ancestors(G, node))
@@ -1868,7 +1879,7 @@ def remap_riv_network(source, target, env):
     with open(str(target[2]), 'w') as fout:
         for outlet in sorted(outlets):
             node = nodes[cellid.index(outlet)]
-            fout.write('{0},{1:0.3f}\n'.format(outlet, G.node[node]['flow']))
+            fout.write('{0},{1:0.3f}\n'.format(outlet, frac_flux[outlet]))
 
     return 0
 
