@@ -760,7 +760,7 @@ def plot_network_map(source, target, env):
         G.node[node]['downstream'] = len(nx.descendants(G, node))
 
     mpl.style.use('ggplot')
-    fig, ax = plt.subplots(1,1, figsize=(8, 12), subplot_kw={'projection':laea})#, dpi=300)
+    fig, ax = plt.subplots(1,1, figsize=(10, 15), subplot_kw={'projection':laea})#, dpi=300)
     ax.coastlines('10m')
 
     pos = {node: G.node[node]['xy'] for node in G.node}
@@ -777,11 +777,11 @@ def plot_network_map(source, target, env):
         with_labels = False
         labels = {}
     nx.draw_networkx_nodes(G, pos, node_size=(upstream*20), node_color=basin,
-            with_labels=with_labels, labels=labels, font_size=6,
+            with_labels=with_labels, labels=labels, font_size=8,
             alpha=.5, cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
     nx.draw_networkx_edges(G, pos, arrowstyle='->', arrowsize=10, node_size=20, edge_color='k', ax=ax)
     if with_labels:
-        nx.draw_networkx_labels(G, pos, labels=labels, font_size=6, ax=ax)
+        nx.draw_networkx_labels(G, pos, labels=labels, font_size=8, ax=ax)
         for t in ax.texts:
             t.set_clip_on(False)
             t.set_rotation(30)
