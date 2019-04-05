@@ -1721,6 +1721,7 @@ def remap_riv_network(source, target, env):
                         corner1_cell = cellid[nodes.index(corner1_node)]
                         corner2_cell = cellid[nodes.index(corner2_node)]
                         if (corner1_node in G.succ[corner2_node]):
+                            print('Swap overlap: from {} to {}'.format(corner2_cell, corner1_cell))
                             G.remove_edge(corner2_node, corner1_node)
                             edits[corner2_cell][corner1_cell][branch] = None
                             G.add_edge(corner2_node, next_node)
@@ -1730,6 +1731,7 @@ def remap_riv_network(source, target, env):
                                 G.edges[corner2_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
                             edits[corner2_cell][next_cell][branch] = True # anything other than None
                         if (corner2_node in G.succ[corner1_node]):
+                            print('Swap overlap: from {} to {}'.format(corner1_cell, corner2_cell))
                             G.remove_edge(corner1_node, corner2_node)
                             edits[corner1_cell][corner2_cell][branch] = None
                             G.add_edge(corner1_node, next_node)
@@ -1766,8 +1768,9 @@ def remap_riv_network(source, target, env):
             # next_node is next if we just moved to new one, or last_node if we didn't
             outlets.add(next_cell)
             for node2 in list(G.successors(next_node)):
-                G.remove_edge(next_node, node2)
                 node2_cell = cellid[nodes.index(node2)]
+                print('Removing original outflows from outlet cell {} to {}'.format(next_cell, node2_cell))
+                G.remove_edge(next_node, node2)
                 edits[next_cell][node2_cell][branch] = None
 
     with open(str(target[0]), 'w', newline='') as fout:
