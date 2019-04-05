@@ -271,70 +271,29 @@ for delta in deltas:
     env.Default(p)
 
     # drop small rivers
-    riv_dropped_small = os.path.join(work, '{0}_riv_dropped_pieces.tif'.format(delta))
+    riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
     myCommand(
             source=riv_skel,
             target=riv_dropped_small,
             action=lib.keep_n_rivers,
             n=1)
     p = env.Command(
-            source=riv_dropped_small,
+            source=riv_clean,
             target=os.path.join(figures, '{}_riv_dropped_small.2.png').format(delta),
             action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
     env.Default(p)
 
-    bifur_grid1 = os.path.join(work,'{0}_bifurs.1.tif'.format(delta))
+    bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
     env.Command(
-            source=riv_dropped_small,
-            target=bifur_grid1,
+            source=riv_clean,
+            target=bifur_grid,
             action=lib.find_bifurs)
-
-    # leave small segments. use flowdir dist to direct them easily
-    #riv_clean1 = os.path.join(work, '{0}_riv_cleaned.1.tif'.format(delta))
-    #myCommand(
-            #source=bifur_grid1,
-            #target=riv_clean1,
-            #action=lib.trim_short_rivs,
-            #minlen=params[delta]['minlen'])
-
-    #bifur_grid2 = os.path.join(work,'{0}_bifurs.2.tif'.format(delta))
-    #env.Command(
-            #source=riv_clean1,
-            #target=bifur_grid2,
-            #action=lib.find_bifurs)
 
     segments1 = os.path.join(work, 'river_segments.1.pkl')
     myCommand(
-            #source=bifur_grid2,
-            source=bifur_grid1,
+            source=bifur_grid,
             target=segments1,
             action=lib.find_river_segments)
-
-    # leave these in, flowdir will directed them ok
-    #riv_clean = os.path.join(work, '{0}_riv_cleaned.tif'.format(delta))
-    #myCommand(
-            #source=[riv_clean1, segments1],
-            #target=riv_clean,
-            #action=lib.remove_small_loops,
-            #minlen=params[delta]['minlen'])
-    riv_clean = riv_dropped_small
-
-    #bifur_grid = os.path.join(work,'{0}_bifurs.tif'.format(delta))
-    #env.Command(
-            ##source=riv_clean,
-            #source=riv_clean1,
-            #target=bifur_grid,
-            #action=lib.find_bifurs)
-
-    #segments2 = os.path.join(work, 'river_segments.2.pkl')
-    #myCommand(
-            #source=bifur_grid,
-            #target=segments2,
-            #action=lib.find_river_segments)
-    bifur_grid = bifur_grid1
-    segments2 = segments1
-
-
 
     p = env.Command(
             source=riv_clean,
@@ -383,7 +342,6 @@ for delta in deltas:
             target=[network, networkdelta, nupstream, ndownstream, nodepositions],
             action=lib.import_rgis_network)
 
-
     nearestnodes1 = os.path.join(reswork, 'nearestnodes.1.pkl')
     myCommand(
             source=[networkdelta, bifur_grid],
@@ -409,16 +367,16 @@ for delta in deltas:
             target=head_rivpt,
             action=lib.find_head_rivpt)
 
-    segments3 = os.path.join(work, 'river_segments.3.pkl')
+    segments2 = os.path.join(work, 'river_segments.2.pkl')
     myCommand(
-            source=[segments2, bifur_grid, clipped_ww_vec, riv_dist_to_coast],
-            target=segments3,
+            source=[segments1, bifur_grid, clipped_ww_vec, riv_dist_to_coast],
+            target=segments2,
             action=lib.set_segment_flowdir)
 
     next_rivpts = os.path.join(work, 'next_rivpts.pkl')
     prev_rivpts = os.path.join(work, 'prev_rivpts.pkl')
     myCommand(
-            source=segments3,
+            source=segments2,
             target=[next_rivpts, prev_rivpts],
             action=lib.next_prev_pts)
 
@@ -450,15 +408,15 @@ for delta in deltas:
             target=[node_dist_to_coast, riv_dist_to_coast],
             action=lib.calc_dist_to_coast)
 
-    segments4 = os.path.join(reswork, '{0}_river_segments.4.pkl'.format(delta))
+    segments3 = os.path.join(reswork, '{0}_river_segments.3.pkl'.format(delta))
     myCommand(
             source=bifur_adj,
-            target=segments4,
+            target=segments3,
             action=lib.find_river_segments)
 
     segments = os.path.join(reswork, '{0}_river_segments.pkl'.format(delta))
     myCommand(
-            source=[segments4, bifur_adj, clipped_ww_vec, riv_dist_to_coast],
+            source=[segments3, bifur_adj, clipped_ww_vec, riv_dist_to_coast],
             target=segments,
             action=lib.set_segment_flowdir)
 
