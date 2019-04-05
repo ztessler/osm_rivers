@@ -471,8 +471,8 @@ def keep_n_rivers(source, target, env):
 
 
 def _walk_to_branch_end(j, i, skip, n, minlen, rivers):
-    if n > minlen:
-        return [(j,i)]
+    #if n > minlen:
+        #return [(j,i)]
     if rivers[j,i] >= 3:
         # found another bifurcation. return a long list of fake points so this segment
         #isn't deleted. last point can't have rivers == 1, so use this one, which is == 3
@@ -506,6 +506,7 @@ def trim_short_rivs(source, target, env):
         for j,i in zip(*bifurs):
             branches = []
             todelete = []
+            tokeep = []
             for dj in [-1, 0, 1]:
                 for di in [-1, 0, 1]:
                     if dj == di == 0:
@@ -516,8 +517,10 @@ def trim_short_rivs(source, target, env):
                         branches.append((j2,i2))
             for (j2, i2) in branches:
                 segment = _walk_to_branch_end(j2, i2, [(j,i)]+branches, 1, minlen, rivers)
-                if rivers[segment[-1]] == 1: # found terminating segment shorter than minlen
+                if (len(segment)<minlen) and (rivers[segment[-1]] == 1): # found terminating segment shorter than minlen
                     todelete.append(segment)
+                else:
+                    tokeep.append(segment)
             #if len(segments) == 1, just a stub, gets deleted (other branches are longer, or non-terminating)
             if todelete:
                 newj = None
@@ -532,6 +535,10 @@ def trim_short_rivs(source, target, env):
                     newj = int(round(sum([segtodelete[-1][0] for segtodelete in todelete]) / len(todelete)))
                     newi = int(round(sum([segtodelete[-1][1] for segtodelete in todelete]) / len(todelete)))
                 rivers[j,i] -= len(todelete) # old bifur point becomes normal river, or a four-way becomes three-way
+                # dont delete segment if it will leave a circular loop
+                # that is, if one branch will be deleted, but the other two branches directly connect
+                if (len(todelete)==1 and (len(tokeep)==2) and (tokeep[0][-1]==tokeep[1][-1])):
+                    tokeep.append(todelete.pop())
                 for segment in todelete:
                     for rivpt in segment: # bifur point not included on segment
                         rivers[rivpt] = 0
