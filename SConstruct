@@ -45,7 +45,7 @@ allOSMrivers = {'Mekong': 'vietnam:cambodia',
                 'Godavari': 'india',
                 }
 params = defaultdict(lambda:{'wetlands': False, 'thinning': 40, 'minwaterway_len': 0, 'minwidth':
-    40, 'minarea': 0}) #, 'minlen': 40})
+    40, 'minarea': 50000}) #, 'minlen': 40})
 params['Mekong'] = {'wetlands': False, 'thinning': 300, 'minwaterway_len': 30000, 'minwidth': 300,
         'minarea': 50000} #, 'minlen': 40}
         #'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minwaterway_len': 0, 'minarea': 0},# 'minlen': 40},
