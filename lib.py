@@ -255,32 +255,33 @@ def merge_water_waterway_vecs(source, target, env):
         unthinned_maybe = unthinned_water.iloc[unthinned_maybe_ind]
         unthinned_matches = unthinned_maybe[unthinned_maybe['geometry'].intersects(line['geometry'])]
 
-        thinned_maybe_ind = list(thinned_index.intersection(line['geometry'].bounds))
-        if not thinned_maybe_ind:
-            # line was in original, but none left in thinned. remove from waterways too
-            filtered_waterways.drop(i, inplace=True)
-            continue
-        thinned_maybe = water.iloc[thinned_maybe_ind]
-        thinned_matches = thinned_maybe[thinned_maybe['geometry'].intersects(line['geometry'])]
-        if thinned_matches.empty:
-            # line was in original, but none left in thinned. remove from waterways too
-            filtered_waterways.drop(i, inplace=True)
-            continue
+        #thinned_maybe_ind = list(thinned_index.intersection(line['geometry'].bounds))
+        #if not thinned_maybe_ind:
+            ## line was in original, but none left in thinned. remove from waterways too
+            #filtered_waterways.drop(i, inplace=True)
+            #continue
+        #thinned_maybe = water.iloc[thinned_maybe_ind]
+        #thinned_matches = thinned_maybe[thinned_maybe['geometry'].intersects(line['geometry'])]
+        #if thinned_matches.empty:
+            ## line was in original, but none left in thinned. remove from waterways too
+            #filtered_waterways.drop(i, inplace=True)
+            #continue
 
-        # remove segments that are inside original water polygons. either they were removed during
-        # thinning, in which we remove them here too, or they were kept, in which case we already
+        # remove waterway line segments that are inside original water polygons.
+        # either those polygons were removed during thinning, in which case we remove
+        # associated waterway lines, or they were kept, in which case we already have them.
         # either way, we dont need the overlap
         # but we DO need to keep segments that are outside of unthinned water bodies, since those
         # are new river segs
         segments_to_remove = []
         for j, unthinned_match in unthinned_matches.iterrows():
             overlap = line['geometry'].intersection(unthinned_match['geometry'])
-            if isinstance(overlap, sgeom.Point):
-                overlap = sgeom.LineString([overlap, overlap])
+            #if isinstance(overlap, sgeom.Point):
+                #overlap = sgeom.LineString([overlap, overlap])
             if isinstance(overlap, sgeom.MultiLineString):
                 for linestring in overlap:
                     segments_to_remove.append(linestring)
-            else:
+            elif isinstance(overlap, sgeom.LineString):
                 segments_to_remove.append(overlap)
 
             #keep = True
@@ -289,6 +290,16 @@ def merge_water_waterway_vecs(source, target, env):
                     #keep = False
             #if keep:
                 #newlines.append(overlap)
+        unique_segments = []
+        for segment in segments_to_remove:
+            isrepeat = False
+            for other in unique_segments:
+                if segment == other:
+                    isrepeat = True
+                    break
+            if not isrepeat:
+                unique_segments.append(segment)
+        segments_to_remove = unique_segments
         if segments_to_remove:
             if len(segments_to_remove)>1:
                 toremove = sgeom.MultiLineString(segments_to_remove)
