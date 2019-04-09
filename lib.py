@@ -1906,17 +1906,41 @@ def remap_riv_network(source, target, env):
 
     # start from each outlet and work way upstream. captures flow from outside main stem
     # remember values for each cell to avoid lots of recomputing
-    upstream_fluxes = {}
-    def _upstream_flux(cell):
-        node = basinnodes[basincellids.index(cell)]
-        flux = 1
-        for pred in Gbasin.pred[node]:
-            pred_cell = basincellids[basinnodes.index(pred)]
-            if pred_cell not in upstream_fluxes:
-                upstream_fluxes[pred_cell] = _upstream_flux(pred_cell)
-            flux += upstream_fluxes[pred_cell] * fracs.get((pred_cell, cell), 1.0)
-        return flux
-    fluxes = {outlet: _upstream_flux(outlet) for outlet in outlets}
+    #upstream_fluxes = {}
+    #def _upstream_flux(cell):
+        #node = basinnodes[basincellids.index(cell)]
+        #flux = 1
+        #for pred in Gbasin.pred[node]:
+            #pred_cell = basincellids[basinnodes.index(pred)]
+            #if pred_cell not in upstream_fluxes:
+                #upstream_fluxes[pred_cell] = _upstream_flux(pred_cell)
+            #flux += upstream_fluxes[pred_cell] * fracs.get((pred_cell, cell), 1.0)
+        #return flux
+    #fluxes = {outlet: _upstream_flux(outlet) for outlet in outlets}
+
+    # accumulate flux
+    # start from each top cell, flow values down
+    tovisit = [node for node in basinnodes if Gbasin.pred[node]]
+    for node in tovisit:
+        Gbasin.nodes[node]['flux'] = 1.0
+        Gbasin.nodes[node]['upstreamcount'] = 0
+    while tovisit:
+        node = tovisit.pop(0)
+        cell = basincellids[basinnodes.index(node)]
+        for downnode in Gbasin.succ[node]:
+            downcell = basincellids[basinnodes.index(downnode)]
+            if 'flux' not in Gbasin.nodes[downnode]:
+                Gbasin.nodes[downnode]['flux'] = 1.0
+                Gbasin.nodes[downnode]['upstreamcount'] = 0
+            Gbasin.nodes[downnode]['flux'] += Gbasin.nodes[node]['flux'] * fracs.get((cell, downcell), 1.0)
+            Gbasin.nodes[downnode]['upstreamcount'] += 1
+            if len(Gbasin.pred[downnode]) == Gbasin.nodes[downnode]['upstreamcount']:
+                tovisit.append(downnode)
+    fluxes = {}
+    for outlet in outlets:
+        outlet_node = basinnodes[basincellids.index(outlet)]
+        fluxes[outlet] = Gbasin.nodes[outlet_node]['flux']
+
     total_flux = sum(list(fluxes.values()))
     frac_flux = {outlet: f/total_flux for outlet, f in fluxes.items()}
 
