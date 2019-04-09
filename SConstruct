@@ -294,6 +294,12 @@ for delta in deltas:
             source=bifur_grid,
             target=segments1,
             action=lib.find_river_segments)
+    myCommand(
+            source=[bifur_grid, segments1],
+            target=os.path.join(resfigures, '{0}_{1}_river_flowdirs.0.png'.format(delta, STNres)),
+            action=[lib.plot_flowdirs_map,
+                    'convert -trim $TARGET $TARGET'],
+            inspect=INSPECTfig)
 
     # add record id column to network cell table
     network = os.path.join(reswork, '{0}_network.gdbn'.format(STNres))
