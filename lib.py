@@ -144,8 +144,8 @@ def select_waterway_rivers(source, target, env):
 def filter_waterway_rivers(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
 
-    minwaterway = env.get('minwaterway', 0)
-    rivers = rivers[~(rivers['name'].isnull()) & (rivers.length > minwaterway)]
+    minwaterway_len = env.get('minwaterway_len', 0)
+    rivers = rivers[~(rivers['name'].isnull()) & (rivers.length > minwaterway_len)]
 
     rivers.to_file(str(target[0]), encoding='utf-8')
     return 0

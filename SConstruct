@@ -44,11 +44,12 @@ allOSMrivers = {'Mekong': 'vietnam:cambodia',
                 'Chao_Phraya': 'thailand',
                 'Godavari': 'india',
                 }
-params = defaultdict(lambda:{'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minwidth': 100, 'minarea': 0, 'minlen': 40})
-params['Mekong'] = {'wetlands': False, 'thinning': 300, 'minwaterway': 30000, 'minwidth': 300,
-        'minarea': 50000, 'minlen': 40}
-        #'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40},
-        #'Godavari': {'wetlands': False, 'thinning': 20, 'minwaterway': 0, 'minarea': 0, 'minlen': 40},
+params = defaultdict(lambda:{'wetlands': False, 'thinning': 40, 'minwaterway_len': 0, 'minwidth':
+    40, 'minarea': 0}) #, 'minlen': 40})
+params['Mekong'] = {'wetlands': False, 'thinning': 300, 'minwaterway_len': 30000, 'minwidth': 300,
+        'minarea': 50000} #, 'minlen': 40}
+        #'Chao_Phraya': {'wetlands': False, 'thinning': 20, 'minwaterway_len': 0, 'minarea': 0},# 'minlen': 40},
+        #'Godavari': {'wetlands': False, 'thinning': 20, 'minwaterway_len': 0, 'minarea': 0},# 'minlen': 40},
         #}
 
 GHAASBIN = env['ENV']['GHAASBIN']
@@ -184,7 +185,7 @@ for delta in deltas:
             source=rivers_ww_vec,
             target=filtered_rivers_ww_vec,
             action=lib.filter_waterway_rivers,
-            minwaterway=params[delta]['minwaterway'])
+            minwaterway_len=params[delta]['minwaterway_len'])
 
     filtered_vec = os.path.join(work, '{0}_filtered_vec/{0}_filtered_vec.shp'.format(delta))
     p = myCommand(
