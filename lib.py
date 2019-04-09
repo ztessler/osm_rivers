@@ -979,14 +979,39 @@ def find_river_segments(source, target, env):
     endpoints = np.where(rivers == 1)
     # just start at the first one. all rivers are connected, so will get everywhere
 
-    branchpoints = set()
+    # assign branch points to correct bifur point. hor/vert first, then diag
+    # this arrangement could result in pt assigned to two bifurs:
+    # 2 2 0 2 0     # last 2 in this row is ambigous, should connect down
+    # 0 0 3 3 2
+    # 0 0 2 0 0
+    #
+    branchto = defaultdict(list)
+    branchfrom = defaultdict(list)
     for j,i in zip(*np.where(rivers>=3)):
-        for dj in [-1,0,1]:
-            for di in [-1,0,1]:
-                if dj == di == 0:
-                    continue
-                if rivers[j+dj, i+di] > 0:
-                    branchpoints.add((j+dj,i+di))
+        for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]:
+            if dj == di == 0:
+                continue
+            if 0 < rivers[j+dj, i+di]: #### no, do # two bifurs could be next to each other, dont mark bifurs as branchpoints
+                branchto[j,i].append((j+dj,i+di))
+                branchfrom[j+dj,i+di].append((j,i)) # should be only single branch from. but neighbor bifurs could result in both being assigned to a branchpoint. check and fix next
+    new_branchfrom = {}
+    #import ipdb;ipdb.set_trace()
+    for (j,i),bifurfroms in list(branchfrom.items()):
+        if (len(bifurfroms) > 1) and np.any([abs(b1[0]-b2[0])<=1 and abs(b1[1]-b2[1])<=1 for b1,b2 in itertools.combinations(bifurfroms,2)]): # adjacent
+            # multiple bifurs assiged. set to hot/vert neighbor bifur
+            for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1)]:
+                if (j,i) in branchto[(j+dj, i+di)]: # found correct bifur pt
+                    new_branchfrom[j,i] = (j+dj,i+di)
+                    for otherfrom in bifurfroms:
+                        if otherfrom == (j+dj,i+di): # the good bifur
+                            continue
+                        branchto[otherfrom].remove((j,i))
+        elif len(bifurfroms)==1 :
+            new_branchfrom[j,i] = bifurfroms[0]
+        else:
+            new_branchfrom[j,i] = bifurfroms
+    branchfrom = new_branchfrom
+
 
     (j,i) = endpoints[0][0], endpoints[1][0]
     cursegi = 0
@@ -1015,8 +1040,8 @@ def find_river_segments(source, target, env):
                     continue
 
                 if rivers[j2,i2] > 0:
-                    if (rivers[j,i]<3) and ((j,i) in branchpoints) and ((j2,i2) in branchpoints):
-                        # don't leap to another branch by accident
+                    if ((j,i) in branchfrom) and ((j2,i2) in branchfrom) and (branchfrom[j,i]==branchfrom[j2,i2]):
+                        # don't leap over bifur to another branch of same bifur by accident
                         continue
                     if (j2, i2) in segments[cursegi]:
                         # dont go backwards up river
@@ -1027,6 +1052,7 @@ def find_river_segments(source, target, env):
 
                     # found next river point
                     if rivers[j,i] >= 3: # currently on bifur point
+                        assert ((j2,i2) in branchto[j,i]) and ((branchfrom[j2,i2]==(j,i)) or ((j,i) in branchfrom[j2,i2]))
                         maxsegi += 1 # each branch gets new cursegi
                         nextsegi = maxsegi
                         segments[nextsegi].append((j,i)) # add current bifur point as start of new segment
@@ -1036,6 +1062,17 @@ def find_river_segments(source, target, env):
                     if rivers[j,i] == 2:
                         # regular path, not bifur, only one neighbor. break so as not to find incorrect diag branch
                         break
+
+    # two adjacent bifurs can result in repeated segments in each way
+    # go through and check for identifcal segments, remove
+    toremove = []
+    for segi, segj in itertools.combinations(fullsegments.keys(), 2):
+        seg1 = fullsegments[segi]
+        seg2 = fullsegments[segj]
+        if set(seg1)==set(seg2):
+            toremove.append(segj)
+    for segi in toremove:
+        del fullsegments[segi]
 
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(fullsegments, fout)
