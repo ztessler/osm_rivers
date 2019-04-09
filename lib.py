@@ -949,7 +949,6 @@ def calc_riv_flowdist_to_coast(source, target, env):
     mindist = np.zeros_like(rivers) * np.nan
     for outlet in outlets:
         tovisit = [(outlet, 0)]
-        visited = set(outlet)
         while tovisit:
             rivpt, dist = tovisit.pop()
             mindist[rivpt] = np.nanmin([mindist[rivpt], dist])
@@ -961,9 +960,9 @@ def calc_riv_flowdist_to_coast(source, target, env):
                     if (nextpt[0]<0 or nextpt[0]==rivers.shape[0] or
                             nextpt[1]<0 or nextpt[1]==rivers.shape[1]):
                         continue
-                    if rivers[nextpt]>0 and nextpt not in visited:
+                    if rivers[nextpt]>0 and np.nanmin([mindist[nextpt],np.inf])>dist+1:
+                        # only visit if this route is better than the prev (if any)
                         tovisit.append((nextpt, dist+1))
-            visited.add(rivpt)
 
     meta['dtype'] = mindist.dtype
     with rasterio.open(str(target[0]), 'w', **meta) as rast:
