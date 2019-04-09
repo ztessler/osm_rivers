@@ -1195,7 +1195,7 @@ def set_segment_flowdir(source, target, env):
                 else:
                     lengths = [len(directed_segments[segi]) for segi in segis]
                     segi = segis[np.argmin(lengths)]
-                    print('Found source-only or sink-only bifur - reversing shortest segment {}'.format(candidates))
+                    print('Found source-only or sink-only bifur - reversing shortest segment {}'.format(segi))
                     directed_segments[segi] = directed_segments[segi][::-1]
                 reversed_segment = True
         if not reversed_segment:
