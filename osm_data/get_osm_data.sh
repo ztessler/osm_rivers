@@ -10,5 +10,5 @@ do
     FILENAME=${COUNTRY}${SUFFIX}
     wget -N ${SERVERPATH}/${FILENAME}
     mkdir -p ${COUNTRY}
-    unzip -u -d ${COUNTRY} ${FILENAME}
+    unzip -u -d -o ${COUNTRY} ${FILENAME}
 done
