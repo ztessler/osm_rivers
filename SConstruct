@@ -130,6 +130,12 @@ for delta in deltas:
             target=clipped_ww_vec,
             action=lib.project_and_clip_osm_waterways)
 
+    cleaned_ww_vec = os.path.join(work, '{0}_cleaned_ww_vec/{0}_cleaned_ww_vec.shp'.format(delta))
+    env.Command(
+            source=clipped_ww_vec,
+            target=cleaned_ww_vec,
+            action='ogr2ogr -nlt LINESTRING -explodecollections -lco ENCODING=UTF-8 $TARGET $SOURCE')
+
     clipped_coastline = os.path.join(work,
             '{0}_coastline_clipped/{0}_coastline_clipped.shp'.format(delta))
     clipped_coast = os.path.join(work,
@@ -152,7 +158,7 @@ for delta in deltas:
     env.Default(p)
 
     p = myCommand(
-            source=clipped_ww_vec,
+            source=cleaned_ww_vec,
             target=os.path.join(figures, '{}_ww_vec_rivs_full.png'.format(delta)),
             action=[lib.plot_vec_rivs,
                     'convert -trim $TARGET $TARGET'])
@@ -165,7 +171,7 @@ for delta in deltas:
 
     rivers_ww_vec = os.path.join(work, '{0}_ww_rivers/{0}_ww_rivers.shp'.format(delta))
     myCommand(
-            source=clipped_ww_vec,
+            source=cleaned_ww_vec,
             target=rivers_ww_vec,
             action=lib.select_waterway_rivers)
     p = myCommand(
@@ -370,7 +376,7 @@ for delta in deltas:
 
     segments2 = os.path.join(work, 'river_segments.2.pkl')
     myCommand(
-            source=[segments1, bifur_grid, clipped_ww_vec, riv_flowdist_to_coast],
+            source=[segments1, bifur_grid, cleaned_ww_vec, riv_flowdist_to_coast],
             target=segments2,
             action=lib.set_segment_flowdir)
 
@@ -417,7 +423,7 @@ for delta in deltas:
 
     segments = os.path.join(reswork, '{0}_river_segments.pkl'.format(delta))
     myCommand(
-            source=[segments3, bifur_adj, clipped_ww_vec, riv_flowdist_to_coast],
+            source=[segments3, bifur_adj, cleaned_ww_vec, riv_flowdist_to_coast],
             target=segments,
             action=lib.set_segment_flowdir)
 
