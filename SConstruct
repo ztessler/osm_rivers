@@ -130,11 +130,17 @@ for delta in deltas:
             target=clipped_ww_vec,
             action=lib.project_and_clip_osm_waterways)
 
-    cleaned_ww_vec = os.path.join(work, '{0}_cleaned_ww_vec/{0}_cleaned_ww_vec.shp'.format(delta))
+    cleaned_ww_vec0 = os.path.join(work, '{0}_cleaned_ww_vec0/{0}_cleaned_ww_vec0.shp'.format(delta))
     env.Command(
             source=clipped_ww_vec,
-            target=cleaned_ww_vec,
+            target=cleaned_ww_vec0,
             action='ogr2ogr -nlt LINESTRING -explodecollections -lco ENCODING=UTF-8 $TARGET $SOURCE')
+
+    cleaned_ww_vec = os.path.join(work, '{0}_cleaned_ww_vec/{0}_cleaned_ww_vec.shp'.format(delta))
+    env.Command(
+            source=cleaned_ww_vec0,
+            target=cleaned_ww_vec,
+            action=lib.remove_ww_duplicates)
 
     clipped_coastline = os.path.join(work,
             '{0}_coastline_clipped/{0}_coastline_clipped.shp'.format(delta))

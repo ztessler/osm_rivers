@@ -133,6 +133,22 @@ def clip_osm_rivers(source, target, env):
     return 0
 
 
+def remove_ww_duplicates(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+
+    dup_ids = np.where(rivers.duplicated('osm_id'))[0]
+    to_drop = []
+    for dup in dup_ids:
+        inds = np.where(rivers['osm_id'] == rivers.iloc[dup]['osm_id'])[0]
+        line = rivers.iloc[inds[0]]['geometry']
+        for ind in inds[1:]:
+            if rivers.iloc[ind]['geometry'] == line:
+                to_drop.append(rivers.index[ind])
+    rivers.drop(to_drop, inplace=True)
+
+    rivers.to_file(str(target[0]), encoding='utf-8')
+
+
 def select_waterway_rivers(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     rivers = rivers[rivers['fclass'] == 'river']
