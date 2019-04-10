@@ -152,10 +152,11 @@ def filter_waterway_rivers(source, target, env):
 
 
 def correct_waterway_flowdir(source, target, env):
-    rivers = geopandas.read_file(str(source[0]))
+    filt_rivers = geopandas.read_file(str(source[0]))
+    full_rivers = geopandas.read_file(str(source[1]))
 
     seen_rivers = set()
-    for i, river in list(rivers.iterrows()):
+    for i, river in list(filt_rivers.iterrows()):
         if i in seen_rivers:
             continue
         seen_rivers.add(i)
@@ -165,10 +166,10 @@ def correct_waterway_flowdir(source, target, env):
         line_ends = []
         while endpts:
             endi, endpt = endpts.pop(0)
-            nearby_ind = list(rivers.sindex.intersection(endpt.bounds))
+            nearby_ind = list(filt_rivers.sindex.intersection(endpt.bounds))
             if endi in nearby_ind:
                 nearby_ind.remove(endi)
-            maybe = rivers.iloc[nearby_ind]
+            maybe = filt_rivers.iloc[nearby_ind]
             matches = maybe[maybe['geometry'].intersects(endpt)]
             if matches.shape[0] != 1:
                 # only extend if this line flows directly into another single line. bifurs more complicated
@@ -213,21 +214,34 @@ def correct_waterway_flowdir(source, target, env):
             else:
                 raise ValueError
 
-        # set all segments to match whichever orientation is most frequent
-        if len(dir1) < len(dir2):
+        # set all segments to match whichever orientation is most frequent, lenght-wise
+        dir1_lengths = sum([line[1].length for line in dir1])
+        dir2_lengths = sum([line[1].length for line in dir2])
+        if  dir1_lengths < dir2_lengths:
             # reverse dir1 lines
             for i, line in dir1:
-                print('Reversing line {0}: osm_id {1}'.format(i, rivers.loc[i,'osm_id']))
-                rivers.loc[i,'geometry'] = sgeom.LineString(list(line.coords)[::-1])
-        elif len(dir1) > len(dir2):
+                full_locs = np.where(full_rivers['geometry']==filt_rivers.loc[i,'geometry'])
+                assert len(full_locs[0])==1
+                full_loc = full_locs[0][0]
+                print('Reversing line {0} (full {1}): osm_id {2}'.format(i, full_loc, filt_rivers.loc[i,'osm_id']))
+                new_line = sgeom.LineString(list(line.coords)[::-1])
+                filt_rivers.loc[i,'geometry'] = new_line
+                full_rivers.loc[full_loc, 'geometry'] = new_line
+        elif dir1_lengths > dir2_lengths:
             # reverse dir2 lines
             for i, line in dir2:
-                print('Reversing line {0}: osm_id {1}'.format(i, rivers.loc[i,'osm_id']))
-                rivers.loc[i,'geometry'] = sgeom.LineString(list(line.coords)[::-1])
+                full_locs = np.where(full_rivers['geometry']==filt_rivers.loc[i,'geometry'])
+                assert len(full_locs[0])==1
+                full_loc = full_locs[0][0]
+                print('Reversing line {0} (full {1}): osm_id {2}'.format(i, full_loc, filt_rivers.loc[i,'osm_id']))
+                new_line = sgeom.LineString(list(line.coords)[::-1])
+                filt_rivers.loc[i,'geometry'] = new_line
+                full_rivers.loc[full_loc, 'geometry'] = new_line
         else:
             print('Equal number of line segments in each direction, not fixing lines {}'.format(sorted([i for (i,line) in dir1+dir2])))
 
-    rivers.to_file(str(target[0]), encoding='utf-8')
+    filt_rivers.to_file(str(target[0]), encoding='utf-8')
+    full_rivers.to_file(str(target[1]), encoding='utf-8')
     return 0
 
 

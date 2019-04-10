@@ -193,11 +193,15 @@ for delta in deltas:
             action=lib.filter_waterway_rivers,
             minwaterway_len=params[delta]['minwaterway_len'])
 
+    # use the filtered waterway lines to correct the direction
+    # apply corrections to full unfiltered set also so the dense version can be used in direction-setting
     corrected_ww_vec = os.path.join(work,'{0}_corrected_ww_vec/{0}_corrected_ww_vec.shp'.format(delta))
+    filt_corrected_ww_vec = os.path.join(work,'{0}_filt_corrected_ww_vec/{0}_filt_corrected_ww_vec.shp'.format(delta))
     p = myCommand(
-            source=filtered_rivers_ww_vec,
-            target=corrected_ww_vec,
+            source=[filtered_rivers_ww_vec, cleaned_ww_vec],
+            target=[filt_corrected_ww_vec, corrected_ww_vec],
             action=lib.correct_waterway_flowdir)
+
 
     filtered_vec = os.path.join(work, '{0}_filtered_vec/{0}_filtered_vec.shp'.format(delta))
     p = myCommand(
@@ -236,7 +240,7 @@ for delta in deltas:
 
     merged_vec = os.path.join(work, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
     myCommand(
-            source=[thinned_vec, filtered_vec, corrected_ww_vec],
+            source=[thinned_vec, filtered_vec, filt_corrected_ww_vec],
             target=merged_vec,
             action=lib.merge_water_waterway_vecs,
             buff=params[delta]['thinning'])
@@ -382,7 +386,7 @@ for delta in deltas:
 
     segments2 = os.path.join(work, 'river_segments.2.pkl')
     myCommand(
-            source=[segments1, bifur_grid, cleaned_ww_vec, riv_flowdist_to_coast],
+            source=[segments1, bifur_grid, corrected_ww_vec, riv_flowdist_to_coast],
             target=segments2,
             action=lib.set_segment_flowdir)
 
@@ -429,7 +433,7 @@ for delta in deltas:
 
     segments = os.path.join(reswork, '{0}_river_segments.pkl'.format(delta))
     myCommand(
-            source=[segments3, bifur_adj, cleaned_ww_vec, riv_flowdist_to_coast],
+            source=[segments3, bifur_adj, corrected_ww_vec, riv_flowdist_to_coast],
             target=segments,
             action=lib.set_segment_flowdir)
 
