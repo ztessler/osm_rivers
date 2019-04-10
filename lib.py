@@ -151,6 +151,86 @@ def filter_waterway_rivers(source, target, env):
     return 0
 
 
+def correct_waterway_flowdir(source, target, env):
+    rivers = geopandas.read_file(str(source[0]))
+
+    seen_rivers = set()
+    for i, river in list(rivers.iterrows()):
+        if i in seen_rivers:
+            continue
+        seen_rivers.add(i)
+        segment = river['geometry']
+        lines = [(i, segment)] # build up list of alinged river segments
+        endpts = [(i, pt) for pt in segment.boundary] # two sgeom.Points
+        line_ends = []
+        while endpts:
+            endi, endpt = endpts.pop(0)
+            nearby_ind = list(rivers.sindex.intersection(endpt.bounds))
+            if endi in nearby_ind:
+                nearby_ind.remove(endi)
+            maybe = rivers.iloc[nearby_ind]
+            matches = maybe[maybe['geometry'].intersects(endpt)]
+            if matches.shape[0] != 1:
+                # only extend if this line flows directly into another single line. bifurs more complicated
+                # found end
+                line_ends.append(endpt)
+                continue
+            for j, match in matches.iterrows():
+                match_line = match['geometry']
+                if endpt.coords[0] in [b.coords[0] for b in match_line.boundary]:
+                    newendpts = [pt for pt in match_line.boundary if pt.coords[0]!=endpt.coords[0]] # add next endpt
+                    assert len(newendpts) == 1
+                    lines.append((j, match_line))
+                    endpts.append((j,newendpts[0]))
+                    seen_rivers.add(j)
+                else: #line intersects somewhere in middle of match_line. found end
+                    line_ends.append(endpt)
+        import ipdb;
+        with ipdb.launch_ipdb_on_exception():
+            seg_starts = [seg.coords[0] for (i,seg) in lines]
+        seg_ends = [seg.coords[-1] for (i,seg) in lines]
+        dir1 = []
+        dir2 = []
+        endpt = line_ends[0] # arbitrary, may actually be line end
+        while lines:
+            # save lines according to their orientation with respect to initial endpt
+            if endpt.coords[0] in seg_starts:
+                ind = seg_starts.index(endpt.coords[0])
+                i, line = lines.pop(ind)
+                seg_starts.pop(ind)
+                seg_ends.pop(ind)
+                dir1.append((i, line))
+                endpt = [pt for pt in line.boundary if pt!=endpt][0]
+                continue
+            elif endpt.coords[0] in seg_ends:
+                ind = seg_ends.index(endpt.coords[0])
+                i, line = lines.pop(ind)
+                seg_starts.pop(ind)
+                seg_ends.pop(ind)
+                dir2.append((i,line))
+                endpt = [pt for pt in line.boundary if pt!=endpt][0]
+                continue
+            else:
+                raise ValueError
+
+        # set all segments to match whichever orientation is most frequent
+        if len(dir1) < len(dir2):
+            # reverse dir1 lines
+            for i, line in dir1:
+                print('Reversing line {0}: osm_id {1}'.format(i, rivers.loc[i,'osm_id']))
+                rivers.loc[i,'geometry'] = sgeom.LineString(list(line.coords)[::-1])
+        elif len(dir1) > len(dir2):
+            # reverse dir2 lines
+            for i, line in dir2:
+                print('Reversing line {0}: osm_id {1}'.format(i, rivers.loc[i,'osm_id']))
+                rivers.loc[i,'geometry'] = sgeom.LineString(list(line.coords)[::-1])
+        else:
+            print('Equal number of line segments in each direction, not fixing lines {}'.format(sorted([i for (i,line) in dir1+dir2])))
+
+    rivers.to_file(str(target[0]), encoding='utf-8')
+    return 0
+
+
 def filter_river_types(source, target, env):
     rivers = geopandas.read_file(str(source[0]))
     if not env.get('wetlands', True):

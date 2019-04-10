@@ -193,6 +193,12 @@ for delta in deltas:
             action=lib.filter_waterway_rivers,
             minwaterway_len=params[delta]['minwaterway_len'])
 
+    corrected_ww_vec = os.path.join(work,'{0}_corrected_ww_vec/{0}_corrected_ww_vec.shp'.format(delta))
+    p = myCommand(
+            source=filtered_rivers_ww_vec,
+            target=corrected_ww_vec,
+            action=lib.correct_waterway_flowdir)
+
     filtered_vec = os.path.join(work, '{0}_filtered_vec/{0}_filtered_vec.shp'.format(delta))
     p = myCommand(
             source=clipped_vec,
@@ -230,7 +236,7 @@ for delta in deltas:
 
     merged_vec = os.path.join(work, '{0}_riv_merged/{0}_riv_merged.shp'.format(delta))
     myCommand(
-            source=[thinned_vec, filtered_vec, filtered_rivers_ww_vec],
+            source=[thinned_vec, filtered_vec, corrected_ww_vec],
             target=merged_vec,
             action=lib.merge_water_waterway_vecs,
             buff=params[delta]['thinning'])
