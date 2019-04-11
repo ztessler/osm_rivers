@@ -1230,12 +1230,12 @@ def find_river_segments(source, target, env):
 
     # two adjacent bifurs can result in repeated segments in each way
     # go through and check for identifcal segments, remove
-    toremove = []
+    toremove = set()
     for segi, segj in itertools.combinations(fullsegments.keys(), 2):
         seg1 = fullsegments[segi]
         seg2 = fullsegments[segj]
         if set(seg1)==set(seg2):
-            toremove.append(segj)
+            toremove.add(segj)
     for segi in toremove:
         del fullsegments[segi]
 
