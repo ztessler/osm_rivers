@@ -2028,7 +2028,10 @@ def remap_riv_network(source, target, env):
                         print('Remove(b):', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                         G.remove_edge(next_node, last_node)
                         edits[next_cell][last_cell][branch] = None
-
+                    if last_cell in outlets:
+                        # last_cell no longer an outlet, this branch goes farther downstream
+                        print('Cell {} no longer an outlet'.format(last_cell))
+                        outlets.discard(last_cell)
                     # check to see if we just crossed a connection. if so, move existing crossed connection to next_cell as well. only an issue with diagonal fluxes
                     if ((abs(last_node[0]-next_node[0]) == 1) and
                         (abs(last_node[1]-next_node[1]) == 1) and
@@ -2085,6 +2088,7 @@ def remap_riv_network(source, target, env):
             # dont do this for likely upstream points, just leave existing connections
             # helps with errors in osm_river, dont want to strand water upstream
             # next_node is next if we just moved to new one, or last_node if we didn't
+            print('Cell {} is an outlet'.format(next_cell))
             outlets.add(next_cell)
             for node2 in list(G.successors(next_node)):
                 node2_cell = cellid[nodes.index(node2)]
