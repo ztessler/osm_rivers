@@ -1985,6 +1985,12 @@ def remap_riv_network(source, target, env):
                 G.remove_edge(next_node, last_node)
                 G.nodes[last_node]['branches'].discard(branch)
                 del edits[next_cell][last_cell][branch]
+                # but if the undone edit was itself a change of flow direction, node could be
+                # left with no downstream flow. check and replace with original flow if thats the case
+                if len(G.succ[last_node])==0 and edits[last_cell][next_cell][branch] is None:
+                    print('Restore earlier flow:', branch, ': cellid {0} to {1}'.format(last_cell, next_cell))
+                    G.add_edge(last_node, next_node)
+                    edits[last_cell][next_cell][branch] = True
             else:
                 # regular re-routing
                 # but dont make link if another branch already goes from next_cell TO last_cell
