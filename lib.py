@@ -998,6 +998,102 @@ def plot_network_map(source, target, env):
     return 0
 
 
+def plot_network_diff_map(source, target, env):
+    Gorig = nx.read_gpickle(str(source[0]))
+    Gbifur = nx.read_gpickle(str(source[1]))
+    with rasterio.open(str(source[2]), 'r') as rast:
+        bifurs_pre = (rast.read(1) > 0).astype(np.int)
+        affine = rast.transform
+    with rasterio.open(str(source[3]), 'r') as rast:
+        bifurs = (rast.read(1) > 0).astype(np.int)
+    with open(str(source[4]), 'r') as fin:
+        proj4_init = fin.read()
+    labeltype = env['labels']
+
+    proj4_params = {}
+    for kv in proj4_init.split():
+        if '=' in kv:
+            k,v = kv.split('=')
+            k = k.replace('+','')
+            try:
+                proj4_params[k] = float(v)
+            except ValueError:
+                proj4_params[k] = v
+
+    assert proj4_params['proj'] == 'laea'
+    laea = ccrs.LambertAzimuthalEqualArea(central_longitude = proj4_params['lon_0'],
+                                          central_latitude = proj4_params['lat_0'])
+
+    # reset upstream counts
+    for node in Gbifur.nodes():
+        Gbifur.node[node]['upstream'] = len(nx.ancestors(Gbifur, node))
+        Gbifur.node[node]['downstream'] = len(nx.descendants(Gbifur, node))
+
+    mpl.style.use('ggplot')
+    fig, ax = plt.subplots(1,1, figsize=(10, 15), subplot_kw={'projection':laea})#, dpi=300)
+    ax.coastlines('10m')
+
+    pos = {node: Gbifur.node[node]['xy'] for node in Gbifur.node}
+    basin = np.array([Gbifur.node[node]['basin'] for node in Gbifur.node])
+    upstream = np.array([np.log(Gbifur.node[node]['upstream']+1) for node in Gbifur.node])
+
+    orig_edges = [edge for edge in Gorig.edges if edge in Gbifur.edges]
+    removed_edges = [edge for edge in Gorig.edges if edge not in Gbifur.edges]
+    new_edges = [edge for edge in Gbifur.edges if edge not in Gorig.edges]
+
+    if labeltype == 'cells':
+        with_labels = True
+        labels = {node: Gbifur.node[node]['cellid'] for node in Gbifur.node}
+    elif labeltype == 'nodes':
+        with_labels = True
+        labels = {node: node for node in Gbifur.node}
+    elif labeltype == 'none':
+        with_labels = False
+        labels = {}
+    nx.draw_networkx_nodes(Gbifur, pos, node_size=(upstream*20), node_color=basin,
+            with_labels=with_labels, labels=labels, font_size=8,
+            alpha=.5, cmap=palettable.cartocolors.qualitative.Bold_10.mpl_colormap, ax=ax)
+    nx.draw_networkx_edges(Gorig, pos, edgelist=orig_edges, arrowstyle='->', arrowsize=10, node_size=20, edge_color='k', width=1, ax=ax)
+    nx.draw_networkx_edges(Gorig, pos, edgelist=removed_edges, arrowstyle='->', arrowsize=10, node_size=20, edge_color='.5', style='dashed', width=.5, ax=ax)
+    nx.draw_networkx_edges(Gbifur, pos, edgelist=new_edges, arrowstyle='->', arrowsize=10, node_size=20, edge_color='k', width=3, ax=ax)
+    if with_labels:
+        nx.draw_networkx_labels(Gorig, pos, labels=labels, font_size=8, ax=ax)
+        for t in ax.texts:
+            t.set_clip_on(False)
+            t.set_rotation(30)
+
+    I, J = np.meshgrid(np.arange(bifurs.shape[1]), np.arange(bifurs.shape[0]))
+    xs, ys = affine * (I.flatten(), J.flatten())
+    X = xs.reshape(I.shape)
+    Y = ys.reshape(J.shape)
+
+    norm = mpl.colors.Normalize(vmin=0, vmax=2)
+    mpl.cm.Reds.set_bad(alpha=0)
+    bifurs_mask = np.ma.masked_equal(bifurs, 0)
+    ax.pcolormesh(X, Y, bifurs_mask, cmap=mpl.cm.Reds, norm=norm)
+
+    mpl.cm.Greens.set_bad(alpha=0)
+    old = bifurs_pre - bifurs
+    old_mask = np.ma.masked_less_equal(old, 0)
+    ax.pcolormesh(X, Y, old_mask, cmap=mpl.cm.Greens, norm=norm)
+
+    mpl.cm.Blues.set_bad(alpha=0)
+    new = bifurs - bifurs_pre
+    new_mask = np.ma.masked_less_equal(new, 0)
+    ax.pcolormesh(X, Y, new_mask, cmap=mpl.cm.Blues, norm=norm)
+
+    ax.axis([X.min(), X.max(), Y.min(), Y.max()])
+    ax.set_aspect('equal')
+
+
+    ax.xaxis.set_ticks([])
+    ax.yaxis.set_ticks([])
+
+    fig.savefig(str(target[0]))
+    if env['inspect'] is not None:
+        plt.show()
+    return 0
+
 def plot_flowdirs_map(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         bifurs = rast.read(1)

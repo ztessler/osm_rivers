@@ -490,6 +490,15 @@ for delta in deltas:
                     labels=labels,
                     inspect=INSPECTfig)
             env.Default(p)
+    for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
+        p = myCommand(
+                source=[networkdelta, bifurnetwork, bifur_grid, bifur_adj, proj4str],
+                target=os.path.join(resfigures, '{0}_{1}_bifur_map{2}_diff.png'.format(delta, STNres, label_name)),
+                action=[lib.plot_network_diff_map,
+                        'convert -trim $TARGET $TARGET'],
+                labels=labels,
+                inspect=INSPECTfig)
+        env.Default(p)
     p = myCommand(
             source=[bifur_adj, segments],
             target=os.path.join(resfigures, '{0}_{1}_river_flowdirs.png'.format(delta, STNres)),
