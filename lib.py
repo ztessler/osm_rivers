@@ -239,7 +239,7 @@ def correct_waterway_flowdir(source, target, env):
             endi, endpt = endpts.pop(0)
             nearby_ind = list(filt_rivers.sindex.intersection(endpt.bounds))
             if endi in nearby_ind:
-                nearby_ind.remove(endi)
+                nearby_ind.remove(endi) # assumes index matches integer index. ok since reset when reading file in
             maybe = filt_rivers.iloc[nearby_ind]
             matches = maybe[maybe['geometry'].intersects(endpt)]
             if matches.shape[0] != 1:
@@ -309,7 +309,8 @@ def correct_waterway_flowdir(source, target, env):
                 filt_rivers.loc[i,'geometry'] = new_line
                 full_rivers.loc[full_loc, 'geometry'] = new_line
         else:
-            print('Equal number of line segments in each direction, not fixing lines {}'.format(sorted([i for (i,line) in dir1+dir2])))
+            inds = sorted([i for (i,line) in dir1+dir2])
+            print('Equal number of line segments in each direction, not fixing lines {0} osm_id: {1}'.format(inds, list(filt_rivers.loc[inds,'osm_id'])))
 
     filt_rivers.to_file(str(target[0]), encoding='utf-8')
     full_rivers.to_file(str(target[1]), encoding='utf-8')
