@@ -134,17 +134,72 @@ def clip_osm_rivers(source, target, env):
 
 
 def remove_ww_duplicates(source, target, env):
+    # remove duplicated lines. cut out overlaps and add back in other segments
+    # needs multiple passes since segments could overlap multiple lines, but get
+    # fully removed during the first match
+
     rivers = geopandas.read_file(str(source[0]))
 
-    dup_ids = np.where(rivers.duplicated('osm_id'))[0]
-    to_drop = []
-    for dup in dup_ids:
-        inds = np.where(rivers['osm_id'] == rivers.iloc[dup]['osm_id'])[0]
-        line = rivers.iloc[inds[0]]['geometry']
-        for ind in inds[1:]:
-            if rivers.iloc[ind]['geometry'] == line:
-                to_drop.append(rivers.index[ind])
-    rivers.drop(to_drop, inplace=True)
+    prev_rivers = None
+    while not rivers.equals(prev_rivers): # need multiple passes since parts of lines can be readded. need to check if those are still overlaping, but wont be found
+        print('\n\nAnother pass\n\n')
+        prev_rivers = rivers.copy() # initial state
+        cleaned_rivers = rivers.copy() # track changes while iterating, update rivers at end of loop
+        todrop = set()
+        for i, line in rivers.iterrows():
+            geom = line['geometry']
+            maybe_inds = list(rivers.sindex.intersection(geom.bounds))
+            if i in maybe_inds:
+                maybe_inds.remove(i)
+            maybe = rivers.iloc[maybe_inds]
+            matches = maybe[maybe['geometry'].intersects(geom)]
+
+            for j, match in matches.iterrows():
+                matchgeom = match['geometry']
+                if (matchgeom.length > geom.length) or (matchgeom.length==geom.length and i>j): # issues when equal?? removed twice? check index numbers, do when i<j
+                    # handle these lines when line is the larger one
+                    continue
+                overlap = geom.intersection(matchgeom)
+                segments_to_remove = []
+                if isinstance(overlap, sgeom.MultiLineString):
+                    for linestring in overlap:
+                        segments_to_remove.append(linestring)
+                elif isinstance(overlap, sgeom.LineString):
+                    segments_to_remove.append(overlap)
+
+                unique_segments = []
+                for segment in segments_to_remove:
+                    isrepeat = False
+                    for other in unique_segments:
+                        if segment == other:
+                            isrepeat = True
+                            break
+                    if not isrepeat:
+                        unique_segments.append(segment)
+                segments_to_remove = unique_segments
+
+                if segments_to_remove:
+                    if len(segments_to_remove)>1:
+                        toremove = sgeom.MultiLineString(segments_to_remove)
+                        # clean it up, segments might be out of order. line could double back.
+                        toremove = sops.linemerge(toremove.intersection(toremove))
+                    else:
+                        toremove = segments_to_remove[0]
+
+                    newlines = matchgeom.difference(toremove)
+                    if j in cleaned_rivers.index:
+                        # may have already been dropped and some pieces added back
+                        cleaned_rivers.drop(j, inplace=True)
+                        print('Removing osm_id {0} indx {1}'.format(match['osm_id'], match.name))
+                    if newlines.length > 0:
+                        if isinstance(newlines, sgeom.LineString):
+                            newlines = [newlines]
+                        for newline in newlines:
+                            match['geometry'] = sgeom.LineString(newline)
+                            match.name = cleaned_rivers.index.max() + 1 # new index so it isn't dropped by accident later
+                            cleaned_rivers = cleaned_rivers.append(match)
+                        print('  Adding back {0} segments from osm_id {1} indx {2}'.format(len(newlines), match['osm_id'], match.name))
+        rivers = cleaned_rivers[cleaned_rivers.length > 0].reset_index(drop=True)
 
     rivers.to_file(str(target[0]), encoding='utf-8')
 
