@@ -1554,18 +1554,20 @@ def set_segment_widths(source, target, env):
         segment_widths[segi] = (width_start, width_end)
         print('Segment {0}: {1}, {2}'.format(segi, GRWL_segmentID, segment_widths[segi]))
 
-    # give each point on each segment an interpolated width. will make branching easier
+    # eventually, flow fractions across a bifurcation will be estimated by riv width at
+    # location of branching.
+    # due to differences in resolution, network bifur could be somewhat downstream of actual
+    # vector/raster bifur point, but should take riv width near actual point of divergence
+    # apply max upstream segment width to entire segment, so reading value anywhere along segment
+    # will give value at bifur point
     river_widths = defaultdict(list)
     for segi, segment in segments.items():
-        n = len(segment)
         widths = segment_widths[segi]
-        fracs = np.linspace(1, 0, n)
         for i, (rivj,rivi) in enumerate(segment):
             if widths == (None, None):
                 river_widths[rivj,rivi].append(None)
             else:
-                frac = fracs[i]
-                river_widths[rivj,rivi].append(frac*widths[0] + (1-frac)*widths[1])
+                river_widths[rivj,rivi].append(widths[0])
     # bifur points will have multiple widths.
     for (rivj,rivi), widths in list(river_widths.items()):
         widths = [w for w in widths if w is not None]
