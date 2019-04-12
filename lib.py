@@ -504,6 +504,7 @@ def plot_vec_rivs(source, target, env):
     ax.yaxis.set_ticks([])
 
     fig.savefig(str(target[0]))
+    plt.close(fig)
     return 0
 
 
@@ -997,6 +998,7 @@ def plot_network_map(source, target, env):
     fig.savefig(str(target[0]))
     if env['inspect'] is not None:
         plt.show()
+    plt.close(fig)
     return 0
 
 
@@ -1094,6 +1096,7 @@ def plot_network_diff_map(source, target, env):
     fig.savefig(str(target[0]))
     if env['inspect'] is not None:
         plt.show()
+    plt.close(fig)
     return 0
 
 def plot_flowdirs_map(source, target, env):
@@ -1131,6 +1134,7 @@ def plot_flowdirs_map(source, target, env):
     fig.savefig(str(target[0]))
     if env['inspect'] is not None:
         plt.show()
+    plt.close(fig)
     return 0
 
 
