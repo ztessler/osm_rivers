@@ -21,6 +21,26 @@ from netCDF4 import Dataset
 import pyproj
 import itertools
 from collections import defaultdict, Counter
+from functools import wraps
+from multiprocessing import Process, Queue
+
+
+def in_new_process(func):
+    # run function in separate process. useful for scons, where parallelism is thread-based and
+    # subject to gil. using this, each thread does it's work in a subprocess, concurrently
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        def worker(*args, **kwargs):
+            # use wrapper to move function return value back via queue, without modifying func
+            queue = args[0]
+            func = args[1]
+            queue.put(func(*args[2:], **kwargs))
+        queue = Queue()
+        p = Process(target=worker, args=((queue, func) + args), kwargs=kwargs)
+        p.start()
+        p.join()
+        return queue.get(block=False)
+    return wrapper
 
 
 def set_projection(source, target, env):
@@ -491,6 +511,7 @@ def merge_water_waterway_vecs(source, target, env):
     return 0
 
 
+@in_new_process
 def plot_vec_rivs(source, target, env):
     mpl.style.use('ggplot')
 
@@ -911,6 +932,7 @@ def find_bifurs(source, target, env):
     return 0
 
 
+@in_new_process
 def plot_network_map(source, target, env):
     G = nx.read_gpickle(str(source[0]))
     with rasterio.open(str(source[1]), 'r') as rast:
@@ -1002,6 +1024,7 @@ def plot_network_map(source, target, env):
     return 0
 
 
+@in_new_process
 def plot_network_diff_map(source, target, env):
     Gorig = nx.read_gpickle(str(source[0]))
     Gbifur = nx.read_gpickle(str(source[1]))
@@ -1099,6 +1122,8 @@ def plot_network_diff_map(source, target, env):
     plt.close(fig)
     return 0
 
+
+@in_new_process
 def plot_flowdirs_map(source, target, env):
     with rasterio.open(str(source[0]), 'r') as rast:
         bifurs = rast.read(1)
