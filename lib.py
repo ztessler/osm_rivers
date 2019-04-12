@@ -2194,7 +2194,7 @@ def remap_riv_network(source, target, env):
 
     # accumulate flux
     # start from each top cell, flow values down
-    tovisit = [node for node in basinnodes if Gbasin.pred[node]]
+    tovisit = [node for node in basinnodes if not Gbasin.pred[node]]
     for node in tovisit:
         Gbasin.nodes[node]['flux'] = 1.0
         Gbasin.nodes[node]['upstreamcount'] = 0
