@@ -840,15 +840,17 @@ def convert_network_to_graphml(source, target, env):
     edges = list(G.edges)
     for edge in edges:
         if G.edges[edge]:
-            branches = []
+            rivpts = []
             weights = []
-            for branch, weight in G.edges[edge]['branches'].items():
-                branches.append(branch)
-                weights.append(weight)
-            branches = ' '.join([str(b) for b in branches])
-            weights = ' '.join([str(w) for w in weights])
-            G.edges[edge]['branches'] = branches
-            G.edges[edge]['weights'] = weights
+            if 'widths' in G.edges[edge]:
+                for rivpt, weight in G.edges[edge]['widths'].items():
+                    rivpts.append(rivpt)
+                    weights.append(weight)
+                rivpts = ' '.join([str(r) for r in rivpts])
+                weights = ' '.join([str(w) for w in weights])
+                G.edges[edge]['rivpts'] = rivpts
+                G.edges[edge]['weights'] = weights
+                del G.edges[edge]['widths']
 
     nx.write_graphml(G, str(target[0]))
     return 0
@@ -2014,10 +2016,10 @@ def remap_riv_network(source, target, env):
                         G.nodes[next_node]['branches'] = {branch}
                     else:
                         G.nodes[next_node]['branches'].add(branch)
-                    if 'branches' not in G.edges[last_node, next_node]: # can we ever even have multiple???
-                        G.edges[last_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                    if 'branches' not in G.edges[last_node, next_node]: # two close rivers could have multiple branchs between two nodes. need to consider both their widths
+                        G.edges[last_node, next_node]['widths'] = {(rivj,rivi): river_widths[rivj,rivi]}
                     else:
-                        G.edges[last_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
+                        G.edges[last_node, next_node]['widths'][(rivj,rivi)] = river_widths[rivj,rivi]
                     for downstream_node in list(G.successors(last_node)):
                         # remove existing downstream links (other than this or other new ones)
                         downstream_cell = cellid[nodes.index(downstream_node)]
@@ -2026,7 +2028,7 @@ def remap_riv_network(source, target, env):
                             G.remove_edge(last_node, downstream_node)
                             edits[last_cell][downstream_cell][branch] = None
                     if last_node in list(G.successors(next_node)):
-                        # if changing direction, remove previous wrong-direction link
+                        # if reversing direction, remove previous wrong-direction link
                         print('Remove(b):', branch, ': cellid {0} to {1}'.format(next_cell, last_cell))
                         G.remove_edge(next_node, last_node)
                         edits[next_cell][last_cell][branch] = None
@@ -2048,10 +2050,10 @@ def remap_riv_network(source, target, env):
                             G.remove_edge(corner2_node, corner1_node)
                             edits[corner2_cell][corner1_cell][branch] = None
                             G.add_edge(corner2_node, next_node)
-                            if 'branches' not in G.edges[corner2_node, next_node]: # can we ever even have multiple???
-                                G.edges[corner2_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                            if 'branches' not in G.edges[corner2_node, next_node]:
+                                G.edges[corner2_node, next_node]['widths'] = {(rivj,rivi): river_widths[rivj,rivi]}
                             else:
-                                G.edges[corner2_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
+                                G.edges[corner2_node, next_node]['widths'][(rivj,rivi)] = river_widths[rivj,rivi]
                             edits[corner2_cell][next_cell][branch] = True # anything other than None
                         if (corner2_node in G.succ[corner1_node]):
                             print('Swap overlap: from {} to {}'.format(corner1_cell, corner2_cell))
@@ -2059,9 +2061,9 @@ def remap_riv_network(source, target, env):
                             edits[corner1_cell][corner2_cell][branch] = None
                             G.add_edge(corner1_node, next_node)
                             if 'branches' not in G.edges[corner1_node, next_node]: # can we ever even have multiple???
-                                G.edges[corner1_node, next_node]['branches'] = {branch: river_widths[rivj,rivi]}
+                                G.edges[corner1_node, next_node]['widths'] = {(rivj,rivi): river_widths[rivj,rivi]}
                             else:
-                                G.edges[corner1_node, next_node]['branches'][branch] = river_widths[rivj,rivi]
+                                G.edges[corner1_node, next_node]['widths'][(rivj,rivi)] = river_widths[rivj,rivi]
                             edits[corner1_cell][next_cell][branch] = True # anything other than None
 
         elif (not valid_next_node): #or
@@ -2117,7 +2119,7 @@ def remap_riv_network(source, target, env):
                 total_discharge = 0
                 for neighbor_node in G.succ[from_node]:
                     discharge = 0
-                    for branch, width in G.edges[(from_node, neighbor_node)]['branches'].items():
+                    for rivpt, width in G.edges[(from_node, neighbor_node)]['widths'].items():
                         # power law relationship between river width and discharge
                         # kellerhals and church 1989, bray 1973,1975,
                         # also http://publications.gc.ca/collections/collection_2007/dfo-mpo/Fs97-6-2637E.pdf page 10
