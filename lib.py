@@ -2140,6 +2140,13 @@ def remap_riv_network(source, target, env):
                 G.remove_edge(next_node, node2)
                 edits[next_cell][node2_cell][branch] = None
 
+    # check for disconnected nodes
+    # ok if they are disconnected in original network, are just single-node basins.
+    # shouldn't cause that though
+    disconnected_orig = {node for node in Gorig.nodes if not Gorig.pred[node] and not Gorig.succ[node]}
+    disconnected_bifur = {node for node in G.nodes if not G.pred[node] and not G.succ[node]}
+    assert disconnected_bifur.issubset(disconnected_orig), 'New disconnected nodes. Should not have that'
+
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
         wrote = []
