@@ -481,9 +481,9 @@ for delta in deltas:
     env.Default(b)
 
     for networkversion, network_name in [(bifurnetwork, 'bifur_'), (networkdelta, '')]:
-        for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells')]:
+        for labels, label_name in [('none', ''), ('nodes', '_nodes'), ('cells', '_cells'), ('outlets', '_outlets')]:
             p = myCommand(
-                    source=[networkversion, bifur_grid, bifur_adj, proj4str],
+                    source=[networkversion, bifur_grid, bifur_adj, bifuroutlets, proj4str],
                     target=os.path.join(resfigures, '{0}_{1}_{2}map{3}.png'.format(delta, STNres, network_name, label_name)),
                     action=[lib.plot_network_map,
                             'convert -trim $TARGET $TARGET'],

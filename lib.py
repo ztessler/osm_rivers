@@ -941,6 +941,14 @@ def plot_network_map(source, target, env):
     with rasterio.open(str(source[2]), 'r') as rast:
         bifurs = (rast.read(1) > 0).astype(np.int)
     with open(str(source[3]), 'r') as fin:
+        reader = csv.reader(fin)
+        next(reader) # skip header
+        outlets = {}
+        percents = {}
+        for line in reader:
+            outlets[(int(line[2]), int(line[1]))] = line[0]
+            percents[(int(line[2]), int(line[1]))] = float(line[3]) * 100
+    with open(str(source[4]), 'r') as fin:
         proj4_init = fin.read()
     labeltype = env['labels']
 
@@ -977,6 +985,9 @@ def plot_network_map(source, target, env):
     elif labeltype == 'nodes':
         with_labels = True
         labels = {node: node for node in G.node}
+    elif labeltype == 'outlets':
+        with_labels = True
+        labels = {node: '{0}\n{1:0.1f}'.format(outlets[node], percents[node]) for node in G.node if node in outlets}
     elif labeltype == 'none':
         with_labels = False
         labels = {}
