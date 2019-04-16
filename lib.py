@@ -1532,6 +1532,60 @@ def set_segment_flowdir(source, target, env):
         if not reversed_segment:
             break
 
+    # check for cycles
+    # load segments as a directed network
+    # reverse first segment that doesnt create source-only or sink-only nodes
+    # assume cycle is small and specific fixed segment doesnt really matter
+    G = nx.DiGraph()
+    for segi in directed_segments:
+        segment = directed_segments[segi]
+        G.add_edge(segment[0], segment[-1])
+        G.edges[segment[0], segment[-1]]['segi'] = segi
+    checkagain = True
+    while checkagain:
+        checkagain = False
+        foundcycle = False
+        for cycle in list(nx.algorithms.cycles.simple_cycles(G)):
+            foundcycle = True
+            print('Found cycle: {}'.format(cycle))
+            cyc1, cyc2 = itertools.tee(cycle)
+            first_val = next(cyc2, None)
+            for n1, n2 in itertools.zip_longest(cyc1, cyc2, fillvalue=first_val):
+                segi = G.edges[n1,n2]['segi']
+                # reverse edge
+                G.remove_edge(n1, n2)
+                G.add_edge(n2, n1)
+                G.edges[n2,n1]['segi'] = segi
+                # check if we made source-only or sink-only nodes
+                if not G.pred[n1] or not G.succ[n1] or not G.pred[n2] or not G.succ[n2]:
+                    # source/sink test no good, undo change
+                    G.remove_edge(n2, n1)
+                    G.add_edge(n1, n2)
+                    G.edges[n1,n2]['segi'] = segi
+                    continue
+                # check if these nodes are still on a cycle
+                # some configs could pass the above test but still have cycles if there are multiple
+                # paths between n1 and n2
+                _cycles = list(nx.algorithms.cycles.simple_cycles(G))
+                nogood = False
+                for c3 in _cycles:
+                    if n1 in c3 and n2 in c3:
+                        # nodes still on cycles, fix no good. undo change and try another fix
+                        G.remove_edge(n2, n1)
+                        G.add_edge(n1, n2)
+                        G.edges[n1,n2]['segi'] = segi
+                        nogood = True
+                        break
+                if nogood:
+                    continue
+                # passed tests
+                print('  Reverse direction of {0}: {1} to {2}'.format(segi, n1, n2))
+                directed_segments[segi] = directed_segments[segi][::-1]
+                checkagain = True
+                break
+        if foundcycle and not checkagain:
+            print('  Could not fix cycle')
+
     with open(str(target[0]), 'wb') as fout:
         pickle.dump(directed_segments, fout)
     return 0
