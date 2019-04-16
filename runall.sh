@@ -4,8 +4,8 @@ RESs=(10min 06min 03min 01min)
 
 for RES in ${RESs[@]}
 do
-        export STNres=$RES
-        scons -j 4
+    export STNres=$RES
+    scons -j 4
 
     # build SSEA bifur file
     mkdir -p output/SSEA/${RES}
