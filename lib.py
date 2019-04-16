@@ -2258,7 +2258,11 @@ def remap_riv_network(source, target, env):
             Gbasin.nodes[downnode]['flux'] += Gbasin.nodes[node]['flux'] * fracs.get((cell, downcell), 1.0)
             Gbasin.nodes[downnode]['upstreamcount'] += 1
             if len(Gbasin.pred[downnode]) == Gbasin.nodes[downnode]['upstreamcount']:
+                if not tovisit:
+                    # mainstem will be transversed last since it has the most upstream nodes to compute
+                    print('on mainstem, going to node {} cell {}'.format(downnode, downcell))
                 tovisit.append(downnode)
+
     fluxes = {}
     for outlet in outlets:
         outlet_node = basinnodes[basincellids.index(outlet)]
