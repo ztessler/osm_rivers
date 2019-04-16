@@ -390,14 +390,14 @@ for delta in deltas:
             target=head_rivpt,
             action=lib.find_head_rivpt)
 
-    segments2 = os.path.join(work, 'river_segments.2.pkl')
+    segments2 = os.path.join(reswork, 'river_segments.2.pkl')
     myCommand(
             source=[segments1, bifur_grid, corrected_ww_vec, riv_flowdist_to_coast],
             target=segments2,
             action=lib.set_segment_flowdir)
 
-    next_rivpts = os.path.join(work, 'next_rivpts.pkl')
-    prev_rivpts = os.path.join(work, 'prev_rivpts.pkl')
+    next_rivpts = os.path.join(reswork, 'next_rivpts.pkl')
+    prev_rivpts = os.path.join(reswork, 'prev_rivpts.pkl')
     myCommand(
             source=segments2,
             target=[next_rivpts, prev_rivpts],
