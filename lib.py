@@ -1309,7 +1309,6 @@ def find_river_segments(source, target, env):
                 branchto[j,i].append((j+dj,i+di))
                 branchfrom[j+dj,i+di].append((j,i)) # should be only single branch from. but neighbor bifurs could result in both being assigned to a branchpoint. check and fix next
     new_branchfrom = {}
-    #import ipdb;ipdb.set_trace()
     for (j,i),bifurfroms in list(branchfrom.items()):
         if (len(bifurfroms) > 1) and np.any([abs(b1[0]-b2[0])<=1 and abs(b1[1]-b2[1])<=1 for b1,b2 in itertools.combinations(bifurfroms,2)]): # adjacent
             # multiple bifurs assiged. set to hot/vert neighbor bifur
@@ -1331,18 +1330,26 @@ def find_river_segments(source, target, env):
     cursegi = 0
     tovisit = [(j,i,cursegi)]
     onfullsegment = set()
+    onpartialsegment = set()
     segments = defaultdict(list)
     fullsegments = {}
     maxsegi = cursegi
     nj, ni = rivers.shape
     while tovisit:
         j, i, cursegi = tovisit.pop(0)
+        if (rivers[j,i]<3) and ((j, i) in onfullsegment):
+            # point has already been assigned to a full segment (bifurs can be on multiple)
+            continue
         segments[cursegi].append((j,i))
+        if rivers[j,i] < 3:
+            onpartialsegment.add((j,i))
         if (rivers[j,i] >= 3) or ((rivers[j,i] == 1) and (len(segments[cursegi])>1)):
             # found segment end
             # mark points on this segment as complete
             for (_j, _i) in segments[cursegi]:
                 onfullsegment.add((_j,_i))
+                if (_j,_i) in onpartialsegment:
+                    onpartialsegment.remove((_j,_i))
             fullsegments[cursegi] = segments[cursegi]
 
         for (dj, di) in [(-1,0),(0,1),(1,0),(0,-1),(-1,-1),(1,-1),(1,1),(-1,1)]: # list with horizontal and vert before diag, in case of ambig route: example: bifur to right and a branch from that to down. down could be jumped to diagonally, so check hor/vert first and break if bifur is found
@@ -1354,7 +1361,8 @@ def find_river_segments(source, target, env):
                     continue
 
                 if rivers[j2,i2] > 0:
-                    if ((j,i) in branchfrom) and ((j2,i2) in branchfrom) and (branchfrom[j,i]==branchfrom[j2,i2]):
+                    if (abs(dj)==1 and abs(di)==1) and (rivers[j,i+di]>=3 or rivers[j+dj,i]>=3):
+                        # points are diag, and surround a bifur
                         # don't leap over bifur to another branch of same bifur by accident
                         continue
                     if (j2, i2) in segments[cursegi]:
@@ -1366,6 +1374,9 @@ def find_river_segments(source, target, env):
 
                     # found next river point
                     if rivers[j,i] >= 3: # currently on bifur point
+                        if (j2,i2) in onpartialsegment:
+                            # point already placed on another unfinished segment, probably growing from other direction. new segments are added at end of tovisit, but very short segment (3-2-3) could be started, then met from other direction and added twice. dont start along this segment a second time
+                            continue
                         assert ((j2,i2) in branchto[j,i]) and ((branchfrom[j2,i2]==(j,i)) or ((j,i) in branchfrom[j2,i2]))
                         maxsegi += 1 # each branch gets new cursegi
                         nextsegi = maxsegi
