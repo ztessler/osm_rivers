@@ -1562,7 +1562,10 @@ def set_segment_flowdir(source, target, env):
     for segi in directed_segments:
         segment = directed_segments[segi]
         G.add_edge(segment[0], segment[-1])
-        G.edges[segment[0], segment[-1]]['segi'] = segi
+        if 'segi' in G.edges[segment[0], segment[-1]]:
+            G.edges[segment[0], segment[-1]]['segi'].append(segi)
+        else:
+            G.edges[segment[0], segment[-1]]['segi'] = [segi]
     checkagain = True
     while checkagain:
         checkagain = False
@@ -1570,20 +1573,109 @@ def set_segment_flowdir(source, target, env):
         for cycle in list(nx.algorithms.cycles.simple_cycles(G)):
             foundcycle = True
             print('Found cycle: {}'.format(cycle))
+            if len(cycle)==2:
+                # pair of segments that should be going in same dir but aren't
+                # should have been fixed above.
+                # if not, that means the upstream or downstream segment is wrong
+                # reverse the shorter one
+                n1, n2 = cycle
+                neighbor_lens = {}
+                if len(G.pred[n1]) == 2:
+                    for pred in G.pred[n1]:
+                        if pred != n2:
+                            n0 = pred
+                            segjs = G.edges[n0,n1]['segi']
+                            for segj in segjs:
+                                neighbor_lens[segj] = len(directed_segments[segj])
+                elif len(G.succ[n1]) == 2:
+                    for succ in G.succ[n1]:
+                        if succ != n2:
+                            n0 = succ
+                            segjs = G.edges[n1,n0]['segi']
+                            for segj in segjs:
+                                neighbor_lens[segj] = len(directed_segments[segj])
+                else:
+                    raise NotImplementedError('Multi-way bifur, dont know which to reverse')
+                if len(G.pred[n2]) == 2:
+                    for pred in G.pred[n2]:
+                        if pred != n1:
+                            n3 = pred
+                            segjs = G.edges[n3,n2]['segi']
+                            for segj in segjs:
+                                neighbor_lens[segj] = len(directed_segments[segj])
+                elif len(G.succ[n2]) == 2:
+                    for succ in G.succ[n2]:
+                        if succ != n1:
+                            n3 = succ
+                            segjs = G.edges[n2,n3]['segi']
+                            for segj in segjs:
+                                neighbor_lens[segj] = len(directed_segments[segj])
+                else:
+                    raise NotImplementedError('Multi-way bifur, dont know which to reverse')
+                if len(neighbor_lens)>=1:
+                    minlen = np.inf
+                    minsegj = None
+                    for segj, seglen in neighbor_lens.items():
+                        if seglen < minlen:
+                            minlen = seglen
+                            minsegj = segj
+                else:
+                    raise NotImplementedError('No neighbors found')
+                print('Reversing shorter neighbor seg {} to fix cycle'.format(minsegj))
+                segmentj = directed_segments[minsegj]
+                G.remove_edge(segmentj[0], segmentj[-1])
+                G.add_edge(segmentj[-1], segmentj[0])
+                if 'segi' in G.edges[segmentj[-1], segmentj[0]]:
+                    G.edges[segmentj[-1], segmentj[0]]['segi'].append(minsegj)
+                else:
+                    G.edges[segmentj[-1], segmentj[0]]['segi'] = [minsegj]
+                directed_segments[minsegj] = directed_segments[minsegj][::-1]
+                if n1 == segmentj[-1]: # segmentj reversed, so flow should be sent TO n1
+                    segis = G.edges[n1, n2]['segi']
+                    print('Reversing segment {} on cycle'.format(segis))
+                    G.remove_edge(n1,n2)
+                    G.add_edge(n2,n1)
+                    if 'segi' in G.edges[n2,n1]:
+                        G.edges[n2,n1]['segi'].extend(segis)
+                    else:
+                        G.edges[n2,n1]['segi'] = segis
+                    for segi in segis:
+                        directed_segments[segi] = directed_segments[segi][::-1]
+                elif n2 == segmentj[-1]: # flow should be sent TO n2
+                    segis = G.edges[n2, n1]['segi']
+                    print('Reversing segment {} on cycle'.format(segis))
+                    G.remove_edge(n2,n1)
+                    G.add_edge(n1,n2)
+                    if 'segi' in G.edges[n1,n2]:
+                        G.edges[n1,n2]['segi'].extend(segis)
+                    else:
+                        G.edges[n1,n2]['segi'] = segis
+                    for segi in segis:
+                        directed_segments[segi] = directed_segments[segi][::-1]
+                else:
+                    raise AssertionError('what??')
+                checkagain = True
+                break
             cyc1, cyc2 = itertools.tee(cycle)
             first_val = next(cyc2, None)
             for n1, n2 in itertools.zip_longest(cyc1, cyc2, fillvalue=first_val):
-                segi = G.edges[n1,n2]['segi']
+                segis = G.edges[n1,n2]['segi']
                 # reverse edge
                 G.remove_edge(n1, n2)
                 G.add_edge(n2, n1)
-                G.edges[n2,n1]['segi'] = segi
+                if 'segi' in G.edges[n2,n1]:
+                    G.edges[n2,n1]['segi'].extend(segis)
+                else:
+                    G.edges[n2,n1]['segi'] = segis
                 # check if we made source-only or sink-only nodes
                 if not G.pred[n1] or not G.succ[n1] or not G.pred[n2] or not G.succ[n2]:
                     # source/sink test no good, undo change
                     G.remove_edge(n2, n1)
                     G.add_edge(n1, n2)
-                    G.edges[n1,n2]['segi'] = segi
+                    if 'segi' in G.edges[n1,n2]:
+                        G.edges[n1,n2]['segi'].extend(segis)
+                    else:
+                        G.edges[n1,n2]['segi'] = segis
                     continue
                 # check if these nodes are still on a cycle
                 # some configs could pass the above test but still have cycles if there are multiple
@@ -1595,14 +1687,18 @@ def set_segment_flowdir(source, target, env):
                         # nodes still on cycles, fix no good. undo change and try another fix
                         G.remove_edge(n2, n1)
                         G.add_edge(n1, n2)
-                        G.edges[n1,n2]['segi'] = segi
+                        if 'segi' in G.edges[n1,n2]:
+                            G.edges[n1,n2]['segi'].extend(segis)
+                        else:
+                            G.edges[n1,n2]['segi'] = segis
                         nogood = True
                         break
                 if nogood:
                     continue
                 # passed tests
-                print('  Reverse direction of {0}: {1} to {2}'.format(segi, n1, n2))
-                directed_segments[segi] = directed_segments[segi][::-1]
+                print('  Reverse direction of segi(s): {0}: {1} to {2}'.format(segis, n1, n2))
+                for segi in segis:
+                    directed_segments[segi] = directed_segments[segi][::-1]
                 checkagain = True
                 break
         if foundcycle and not checkagain:
