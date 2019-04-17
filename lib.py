@@ -1532,11 +1532,11 @@ def set_segment_flowdir(source, target, env):
     # endpoints
     while True:
         reversed_segment = False
-        for segi, segj in itertools.combinations(directed_segments.keys(), 2):
+        for segi, segj in list(itertools.combinations(directed_segments.keys(), 2)):
             seg1 = directed_segments[segi]
             seg2 = directed_segments[segj]
             if (seg1[0] == seg2[-1] and seg1[-1] == seg2[0]):
-                for segk, segl in itertools.combinations(directed_segments.keys(), 2):
+                for segk, segl in list(itertools.combinations(directed_segments.keys(), 2)):
                     if (segk in [segi, segj]) or (segl in [segi, segj]):
                         continue
                     seg3 = directed_segments[segk]
