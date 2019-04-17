@@ -2317,7 +2317,8 @@ def remap_riv_network(source, target, env):
     # shouldn't cause that though
     disconnected_orig = {node for node in Gorig.nodes if not Gorig.pred[node] and not Gorig.succ[node]}
     disconnected_bifur = {node for node in G.nodes if not G.pred[node] and not G.succ[node]}
-    assert disconnected_bifur.issubset(disconnected_orig), 'New disconnected nodes. Should not have that'
+    new_disconnected = disconnected_bifur.difference(disconnected_orig)
+    print('New disconnected nodes: {}'.format(sorted(new_disconnected)))
 
     with open(str(target[0]), 'w', newline='') as fout:
         csvwriter = csv.writer(fout)
