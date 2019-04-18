@@ -316,6 +316,11 @@ for delta in deltas:
             holethresh=1000)
     p = env.Command(
             source=riv_skel,
+            target=os.path.join(figures, '{}_riv_skel_full.1.png').format(delta),
+            action='convert -negate -normalize $SOURCE $TARGET')
+    env.Default(p)
+    p = env.Command(
+            source=riv_skel,
             target=os.path.join(figures, '{}_riv_skel.1.png').format(delta),
             action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
     env.Default(p)
@@ -327,6 +332,11 @@ for delta in deltas:
             target=riv_clean,
             action=lib.keep_n_rivers,
             n=1)
+    p = env.Command(
+            source=riv_clean,
+            target=os.path.join(figures, '{}_riv_clean_full.png').format(delta),
+            action='convert -negate -normalize $SOURCE $TARGET')
+    env.Default(p)
     p = env.Command(
             source=riv_clean,
             target=os.path.join(figures, '{}_riv_clean.png').format(delta),
