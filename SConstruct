@@ -297,6 +297,11 @@ for delta in deltas:
             imsize=1000)
     p = env.Command(
             source=riv_rast,
+            target=os.path.join(figures, '{}_riv_rast_full.0.png').format(delta),
+            action='convert -negate -normalize $SOURCE $TARGET')
+    env.Default(p)
+    p = env.Command(
+            source=riv_rast,
             target=os.path.join(figures, '{}_riv_rast.0.png').format(delta),
             action='convert -resize {0} -negate -normalize $SOURCE $TARGET'.format(thumbnail_size))
     env.Default(p)
