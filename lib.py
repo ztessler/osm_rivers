@@ -942,12 +942,16 @@ def plot_network_map(source, target, env):
         bifurs = (rast.read(1) > 0).astype(np.int)
     with open(str(source[3]), 'r') as fin:
         reader = csv.reader(fin)
-        next(reader) # skip header
+        cols = next(reader)
+        outlet = cols.index('Outlet')
+        nodej = cols.index('NodeJ')
+        nodei = cols.index('NodeI')
+        frac = cols.index('DischargeFraction')
         outlets = {}
         percents = {}
         for line in reader:
-            outlets[(int(line[2]), int(line[1]))] = line[0]
-            percents[(int(line[2]), int(line[1]))] = float(line[3]) * 100
+            outlets[(int(line[nodej]), int(line[nodei]))] = line[outlet]
+            percents[(int(line[nodej]), int(line[nodei]))] = float(line[frac]) * 100
     with open(str(source[4]), 'r') as fin:
         proj4_init = fin.read()
     labeltype = env['labels']
@@ -1046,12 +1050,16 @@ def plot_network_diff_map(source, target, env):
         bifurs = (rast.read(1) > 0).astype(np.int)
     with open(str(source[4]), 'r') as fin:
         reader = csv.reader(fin)
-        next(reader) # skip header
+        cols = next(reader)
+        outlet = cols.index('Outlet')
+        nodej = cols.index('NodeJ')
+        nodei = cols.index('NodeI')
+        frac = cols.index('DischargeFraction')
         outlets = {}
         percents = {}
         for line in reader:
-            outlets[(int(line[2]), int(line[1]))] = line[0]
-            percents[(int(line[2]), int(line[1]))] = float(line[3]) * 100
+            outlets[(int(line[nodej]), int(line[nodei]))] = line[outlet]
+            percents[(int(line[nodej]), int(line[nodei]))] = float(line[frac]) * 100
     with open(str(source[5]), 'r') as fin:
         proj4_init = fin.read()
     labeltype = env['labels']
@@ -2431,9 +2439,9 @@ def remap_riv_network(source, target, env):
             Gbasin.nodes[downnode]['flux'] += Gbasin.nodes[node]['flux'] * fracs.get((cell, downcell), 1.0)
             Gbasin.nodes[downnode]['upstreamcount'] += 1
             if len(Gbasin.pred[downnode]) == Gbasin.nodes[downnode]['upstreamcount']:
-                if not tovisit:
+                #if not tovisit:
                     # mainstem will be transversed last since it has the most upstream nodes to compute
-                    print('on mainstem, going to node {} cell {}'.format(downnode, downcell))
+                    #print('on mainstem, going to node {} cell {}'.format(downnode, downcell))
                 tovisit.append(downnode)
 
     fluxes = {}
@@ -2450,10 +2458,11 @@ def remap_riv_network(source, target, env):
     nx.write_gpickle(G, str(target[1]))
 
     with open(str(target[2]), 'w') as fout:
-        fout.write('Outlet,NodeI,NodeJ(netcdf convention),Discharge Fraction\n')
+        fout.write('Outlet,Lon,Lat,NodeJ,NodeI,DischargeFraction\n')
         for outlet in sorted(outlets):
             node = nodes[cellid.index(outlet)]
-            fout.write('{0},{1},{2},{3:0.3f}\n'.format(outlet, node[1], node[0], frac_flux[outlet]))
+            lon, lat = G.nodes[node]['ll']
+            fout.write('{0},{1:0.3f},{2:0.3f},{3},{4},{5:0.3f}\n'.format(outlet, lon, lat, node[0], node[1], frac_flux[outlet]))
 
     return 0
 
