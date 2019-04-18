@@ -198,6 +198,17 @@ for delta in deltas:
             target=filtered_rivers_ww_vec,
             action=lib.filter_waterway_rivers,
             minwaterway_len=params[delta]['minwaterway_len'])
+    p = myCommand(
+            source=filtered_rivers_ww_vec,
+            target=os.path.join(figures, '{}_ww_filtered_rivers_full.png'.format(delta)),
+            action=[lib.plot_vec_rivs,
+                    'convert -trim $TARGET $TARGET'])
+    env.Default(p)
+    p = myCommand(
+            source=os.path.join(figures, '{}_ww_filtered_rivers_full.png'.format(delta)),
+            target=os.path.join(figures, '{}_ww_filtered_rivers.png'.format(delta)),
+            action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+    env.Default(p)
 
     # use the filtered waterway lines to correct the direction
     # apply corrections to full unfiltered set also so the dense version can be used in direction-setting
@@ -215,6 +226,17 @@ for delta in deltas:
             target=filtered_vec,
             action=lib.filter_river_types,
             wetlands=params[delta]['wetlands'])
+    p = myCommand(
+            source=filtered_vec,
+            target=os.path.join(figures, '{}_filtered_vec_rivs_full.png'.format(delta)),
+            action=[lib.plot_vec_rivs,
+                    'convert -trim $TARGET $TARGET'])
+    env.Default(p)
+    p = myCommand(
+            source=os.path.join(figures, '{}_filtered_vec_rivs_full.png'.format(delta)),
+            target=os.path.join(figures, '{}_filtered_vec_rivs.png'.format(delta)),
+            action='convert -fuzz 40% -trim -trim -resize {0} $SOURCE $TARGET'.format(thumbnail_size))
+    env.Default(p)
 
     width_est_vec = os.path.join(work, '{0}_riv_width_est/{0}_riv_width_est.shp'.format(delta))
     myCommand(
