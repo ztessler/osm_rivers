@@ -9,3 +9,8 @@ This code generates a list of bifurcation points where the STN network should be
 Some of the code may need to be edited to run elsewhere as some paths to required datasets are hardcoded.
 
 Use `runall.sh`, or run a specific spatial resolution with `STNres=06min scons`
+
+Rerouting is exported as a CSV file for ingestion by modified version of `WBMplus`. In this figure, new links are in bold, and removed links are faint. Small text
+at river mouths shows the fraction of upstream flow that exits at this outlet. Higher spatial
+resolutions work as well, though this static figure is very dense. See `/figures` directory.
+<img src="figures/Mekong/06min/Mekong_06min_bifur_map_outlets_diff.png" width="450px" title="Mekong 06min">
